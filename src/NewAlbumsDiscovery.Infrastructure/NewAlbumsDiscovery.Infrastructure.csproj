@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\NewAlbumsDiscovery.Application\NewAlbumsDiscovery.Application.csproj" />
+    <ProjectReference Include="..\NewAlbumsDiscovery.Domain\NewAlbumsDiscovery.Domain.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/NewAlbumsDiscovery.Application/NewAlbumsDiscovery.Application.csproj" />
+    <Project Path="src/NewAlbumsDiscovery.Domain/NewAlbumsDiscovery.Domain.csproj" />
+    <Project Path="src/NewAlbumsDiscovery.Infrastructure/NewAlbumsDiscovery.Infrastructure.csproj" />
+    <Project Path="src/NewAlbumsDiscovery.Worker/NewAlbumsDiscovery.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NewAlbumsDiscovery.Application.Tests/NewAlbumsDiscovery.Application.Tests.csproj" />
+    <Project Path="tests/NewAlbumsDiscovery.Domain.Tests/NewAlbumsDiscovery.Domain.Tests.csproj" />
+    <Project Path="tests/NewAlbumsDiscovery.Infrastructure.Tests/NewAlbumsDiscovery.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>
