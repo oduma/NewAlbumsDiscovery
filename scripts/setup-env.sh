@@ -7,13 +7,19 @@
 #
 # Filename -> env var name (mechanical transform):
 #   1. Strip the .txt extension.
-#   2. Split the remaining filename on '-'.
-#   3. For each segment: uppercase the first character, lowercase the rest.
-#   4. Join the segments with '__'.
+#   2. Split the remaining filename on '-' into top-level segments; each becomes its own
+#      '__'-joined piece of the variable name (uppercase first character, lowercase the rest).
+#   3. Within a segment, '_' marks a compound word: split on '_', PascalCase each sub-word
+#      (same uppercase-first/lowercase-rest rule), and concatenate them with NO separator.
+#      Segments with no '_' are unaffected by this rule.
+#   4. Join the top-level (hyphen-split) pieces with '__'.
 #   5. Prefix with 'NewAlbumsDiscovery__'.
-#   Example: sqlite-db-path.txt -> NewAlbumsDiscovery__Sqlite__Db__Path
+#   Examples:
+#     sqlite-db-path.txt                  -> NewAlbumsDiscovery__Sqlite__Db__Path
+#     database-loved_tracks_db_path.txt   -> NewAlbumsDiscovery__Database__LovedTracksDbPath
 #
-# File content is treated as a path relative to $HOME.
+# File content is treated as a path relative to $HOME. Use forward slashes ('/') as the
+# separator regardless of OS - this script joins paths with '/' directly (no path-combine API).
 #
 # Must be run as root (sudo) - machine-wide persistence requires it. Must be *sourced*
 # (`source scripts/setup-env.sh`) for the current shell to see the new variables immediately;
@@ -55,6 +61,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 Z_COM_AI_DIR="$SCRIPT_DIR/../z-com-ai"
 SYSTEMD_SCAFFOLD_FILE="/etc/newalbumsdiscovery.env"
 
+# Variable names retired by later phases. Removed unconditionally on every run so a developer's
+# machine doesn't keep serving a stale value alongside its replacement.
+DEPRECATED_VAR_NAMES=("NewAlbumsDiscovery__Sqlite__Db__Path")
+
+remove_deprecated_vars() {
+    local name removed
+    for name in "${DEPRECATED_VAR_NAMES[@]}"; do
+        removed=0
+        if [ -f /etc/environment ] && grep -q "^${name}=" /etc/environment 2>/dev/null; then
+            sed -i "/^${name}=/d" /etc/environment
+            removed=1
+        fi
+        if [ -f "$SYSTEMD_SCAFFOLD_FILE" ] && grep -q "^${name}=" "$SYSTEMD_SCAFFOLD_FILE" 2>/dev/null; then
+            sed -i "/^${name}=/d" "$SYSTEMD_SCAFFOLD_FILE"
+            removed=1
+        fi
+        unset "$name" 2>/dev/null || true
+        if [ "$removed" -eq 1 ]; then
+            echo "Removed deprecated variable: $name"
+        fi
+    done
+}
+
 if [ "$(id -u)" -ne 0 ]; then
     echo "ERROR: this script must be run as root to persist machine-wide environment variables.
 
@@ -72,17 +101,32 @@ if [ "$SOURCED" -eq 0 ]; then
     echo "NOTE: running as a script (not sourced) - /etc/environment and $SYSTEMD_SCAFFOLD_FILE will be updated, but this shell will not see the new variables. Re-run as 'source scripts/setup-env.sh' (while already root) if you want that." >&2
 fi
 
+remove_deprecated_vars
+
+to_pascal_compound() {
+    local segment="$1"
+    local -a subwords
+    IFS='_' read -ra subwords <<< "$segment"
+    local result="" sub first rest
+    for sub in "${subwords[@]}"; do
+        [ -z "$sub" ] && continue
+        first="$(printf '%s' "${sub:0:1}" | tr '[:lower:]' '[:upper:]')"
+        rest="$(printf '%s' "${sub:1}" | tr '[:upper:]' '[:lower:]')"
+        result="${result}${first}${rest}"
+    done
+    printf '%s' "$result"
+}
+
 to_env_var_name() {
     local base_name="$1"
     local -a segments
     IFS='-' read -ra segments <<< "$base_name"
     local var_name="NewAlbumsDiscovery"
-    local seg first rest
+    local seg piece
     for seg in "${segments[@]}"; do
         [ -z "$seg" ] && continue
-        first="$(printf '%s' "${seg:0:1}" | tr '[:lower:]' '[:upper:]')"
-        rest="$(printf '%s' "${seg:1}" | tr '[:upper:]' '[:lower:]')"
-        var_name="${var_name}__${first}${rest}"
+        piece="$(to_pascal_compound "$seg")"
+        var_name="${var_name}__${piece}"
     done
     printf '%s' "$var_name"
 }

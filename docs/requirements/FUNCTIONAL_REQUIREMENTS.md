@@ -105,3 +105,41 @@ Cross-platform developer setup scripts (`scripts/setup-env.ps1` for Windows, `sc
 
 ### Implementation Record
 - Plan: [`docs/plans/phase2-env-setup-scripts-plan.md`](../plans/phase2-env-setup-scripts-plan.md) — all steps checked off, status marked complete.
+
+## Phase 2.1: Environment Variable Rename — Read-Only Database Path — 📋 PLANNED (2026-08-12)
+
+**Source:** Architecture update in `docs/requirements/high-level-requirements.md` and `docs/specs/technical-specs.md` (dual-database architecture), which renamed the read-only database's env var from the Phase 2-era `NewAlbumsDiscovery__Sqlite__Db__Path` to `NewAlbumsDiscovery__Database__LovedTracksDbPath`. Finalized here after clarification.
+
+### Goal
+Update the Phase 2 developer setup scripts (`scripts/setup-env.ps1`, `scripts/setup-env.sh`) so the read-only loved-tracks database path is published under its new name, `NewAlbumsDiscovery__Database__LovedTracksDbPath`, with a value that resolves to the full database file path (not just a folder) — matching the dual-database architecture now specified in `docs/specs/technical-specs.md` §3. Also clean up the now-obsolete `NewAlbumsDiscovery__Sqlite__Db__Path` Machine-level variable created by the original Phase 2 testing.
+
+### Decisions (confirmed with user 2026-08-12)
+1. **Mechanical-transform algorithm extended, not abandoned.** Hyphen (`-`) keeps its Phase 2 meaning: it starts a new `__`-joined top-level segment. New rule added: an underscore (`_`) within a segment marks a *compound word* — each `_`-separated sub-word is PascalCased and concatenated with **no** separator between them (separators only go between top-level hyphen segments). Example: `database-loved_tracks_db_path.txt` → `Database` + `__` + `LovedTracksDbPath` → `NewAlbumsDiscovery__Database__LovedTracksDbPath`. Filenames with no underscores behave exactly as before Phase 2.1 — fully backward compatible.
+2. **File content now includes the database filename, not just the folder.** Per `docs/specs/technical-specs.md` §2.A (`.../DB/loved-tracks.db`), the source `.txt` file's content changes from `DB` to `DB/loved-tracks.db` — a full path relative to the user's home directory. **Convention: file content always uses forward slashes (`/`) as the separator, regardless of target OS** — both `Join-Path` (PowerShell) and the existing string-concatenation join (Bash) handle `/` correctly; a literal backslash would silently produce a garbage path on Linux.
+3. **`z-com-ai/loved-tracks-db-path.txt` (already renamed and content-updated by the user ahead of this plan) will be renamed again, to `z-com-ai/database-loved_tracks_db_path.txt`.** The current on-disk filename is hyphen-only (no `database` segment, no underscore) and does not encode the new compound-word convention — mechanically it would still produce `NewAlbumsDiscovery__Loved__Tracks__Db__Path`, not the approved target `NewAlbumsDiscovery__Database__LovedTracksDbPath`. Content (`DB/loved-tracks.db`) is already correct and stays unchanged.
+4. **Old variable is actively cleaned up, not just left stale.** Both scripts gain a small hardcoded "deprecated variable names" list (currently just `NewAlbumsDiscovery__Sqlite__Db__Path`) and remove each one every time the script runs — Machine scope + current session on Windows; `/etc/environment` + `/etc/newalbumsdiscovery.env` lines + current-session `unset` (if sourced) on Linux. Idempotent: running against an already-cleaned machine is a silent no-op for that variable.
+
+### Design Notes
+- No change to the elevation/root gating, idempotent-upsert-for-new-variables logic, or sourced-shell handling from Phase 2 — reused as-is.
+- The second new variable implied by the updated architecture, `NewAlbumsDiscovery__Database__AppDbPath` (the app's own read-write database, under `<AppBaseDirectory>/Database/`, not the user's home directory), is **out of scope** here — it isn't a home-relative path sourced from a `z-com-ai/*.txt` file the way `LovedTracksDbPath` is, so it doesn't fit this scripts' model. It will be addressed separately.
+- `docs/requirements/phase2-requirements.md` remains untouched (Antigravity-owned source spec, per `.agents/rules/multi-agent-governance.md`) — only this file reflects the update.
+
+### In Scope
+- Rename `z-com-ai/loved-tracks-db-path.txt` → `z-com-ai/database-loved_tracks_db_path.txt` (content unchanged: `DB/loved-tracks.db`).
+- Extend `ConvertTo-EnvVarName` (`setup-env.ps1`) and `to_env_var_name` (`setup-env.sh`) with the underscore-compound-word rule.
+- Add deprecated-variable cleanup (`NewAlbumsDiscovery__Sqlite__Db__Path`) to both scripts.
+- Update both scripts' header-comment documentation of the naming algorithm.
+
+### Out of Scope
+- `NewAlbumsDiscovery__Database__AppDbPath` and any other new variables implied by the updated architecture (Gemini, Telegram, etc.) — not part of this narrow rename task.
+- Any application code that actually opens/reads either database (Phase 3+ concern).
+- Updating `docs/requirements/phase2-requirements.md`.
+
+### Acceptance Criteria
+- Given `z-com-ai/database-loved_tracks_db_path.txt` (content `DB/loved-tracks.db`), running the elevated/root script sets `NewAlbumsDiscovery__Database__LovedTracksDbPath` = `<home>/DB/loved-tracks.db`.
+- A filename with no underscores (e.g. a synthetic `gemini-api-key.txt`) still produces the old-style flat name (`NewAlbumsDiscovery__Gemini__Api__Key`) — regression check confirming the extension doesn't break Phase 2 behavior.
+- The stale `NewAlbumsDiscovery__Sqlite__Db__Path` variable is removed (Windows: Machine scope + current session; Linux: `/etc/environment`, `/etc/newalbumsdiscovery.env`, current session if sourced) after running either script.
+- Rerunning either script a second time is idempotent: no duplicate lines, and the already-removed old variable doesn't reappear or error.
+
+### Implementation Record
+- Plan: [`docs/plans/phase2.1-env-var-rename-plan.md`](../plans/phase2.1-env-var-rename-plan.md)

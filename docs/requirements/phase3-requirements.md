@@ -1,7 +1,7 @@
 # Phase 3 Requirements: Feature 1 - Music Preference Aggregator Engine & Storage
 
 ## 1. Goal
-Implement Feature 1 (Music Preference Aggregator) as a background-threaded, deterministic domain calculation engine that reads `LovedTracks` from SQLite, executes a 3-level cascading threshold algorithm in memory, and atomically replaces the output in the `AggregatedBuckets` SQLite table.
+Implement Feature 1 (Music Preference Aggregator) as a background-threaded, deterministic domain calculation engine that reads `LovedTracks` from the external read-only `loved-tracks.db` database, executes a 3-level cascading threshold algorithm in memory, and atomically replaces the output in the `AggregatedBuckets` table inside the application's internal `new-albums-discovery.db` database.
 
 ---
 
@@ -11,8 +11,9 @@ Implement Feature 1 (Music Preference Aggregator) as a background-threaded, dete
 
 ---
 
-## 3. Data Source: `LovedTracks`
-- The source table `LovedTracks` is maintained externally in SQLite and must be treated as strictly read-only.
+## 3. Dual Database Setup & Read-Only Source (`loved-tracks.db`)
+- **Read-Only Database Location:** Located in the `DB` folder under the user's home directory (`%USERPROFILE%\DB\loved-tracks.db` or `$HOME/DB/loved-tracks.db`).
+- **Source Table (`LovedTracks`):** Maintained externally and treated as strictly read-only.
 - **Table Columns Used:** `CountryOrRegion` (TEXT), `LanguagesJson` (TEXT containing a JSON string array, e.g. `["English", "Swahili"]`), `GenresJson` (TEXT containing a JSON string array, e.g. `["Indie Rock", "Post-Punk"]`).
 - All records in `LovedTracks` are evaluated during each run.
 
@@ -81,8 +82,8 @@ All threshold values must be placed in `appsettings.json` (and `appsettings.Deve
 
 ---
 
-## 6. Atomic Database Persistence
-Once the in-memory calculation finishes successfully, the output is saved to the SQLite table `AggregatedBuckets`.
+## 6. Internal Application Database Persistence (`new-albums-discovery.db`)
+Once the in-memory calculation finishes successfully, the output is saved to the internal application database located in a `Database` subfolder under the application's running folder (`<AppBaseDirectory>/Database/new-albums-discovery.db`), which is owned by this application and maintained via EF Core Migrations (`AppDbContext`).
 
 ### Table Schema (`AggregatedBuckets`)
 ```sql
@@ -99,13 +100,13 @@ CREATE TABLE IF NOT EXISTS AggregatedBuckets (
 ```
 
 ### Atomic Swap Transaction
-Persistence must execute inside a single SQLite transaction to ensure zero-downtime and zero risk of corrupted/partial data if interrupted:
-```sql
-BEGIN TRANSACTION;
-DELETE FROM AggregatedBuckets;
-INSERT INTO AggregatedBuckets (Id, BucketName, BucketType, Country, Language, Genre, TrackCount, CreatedAtUtc) 
-VALUES (@Id, @BucketName, @BucketType, @Country, @Language, @Genre, @TrackCount, @CreatedAtUtc);
-COMMIT;
+Persistence must execute inside a single EF Core / SQLite transaction against `AppDbContext` to ensure zero-downtime and zero risk of corrupted/partial data if interrupted:
+```csharp
+using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM AggregatedBuckets", cancellationToken);
+dbContext.AggregatedBuckets.AddRange(newBuckets);
+await dbContext.SaveChangesAsync(cancellationToken);
+await transaction.CommitAsync(cancellationToken);
 ```
 
 ---
@@ -118,11 +119,10 @@ Per `docs/constitution/DDD-architecture.md` and `coding-principles.md`:
    - `BucketAggregatorEngine` (Pure C# domain service executing the 3-level cascading logic and threshold filtering). Zero dependencies.
 2. **Application Layer (`src/NewAlbumsDiscovery.Application/MusicAggregator`)**:
    - `AggregateMusicPreferencesCommand` & MediatR Command Handler.
-   - Defines `ILovedTrackRepository` and `IAggregatedBucketRepository` interfaces.
+   - Defines `ILovedTrackRepository` (queries read-only `loved-tracks.db`) and `IAggregatedBucketRepository` (writes to `new-albums-discovery.db`) interfaces.
 3. **Infrastructure Layer (`src/NewAlbumsDiscovery.Infrastructure/Sqlite`)**:
-   - `LovedTrackRepository` (Queries SQLite `LovedTracks` table).
-   - `AggregatedBucketRepository` (Executes atomic `DELETE + INSERT` transaction on `AggregatedBuckets`).
-   - SQLite connection string uses `Default Timeout = 5000` for WAL compatibility.
+   - `LovedTrackDbContext` / `LovedTrackRepository` (Queries external `loved-tracks.db`).
+   - `AppDbContext` / `AggregatedBucketRepository` (Executes EF Core Migrations and atomic `DELETE + INSERT` transaction on `new-albums-discovery.db`).
 
 ---
 
