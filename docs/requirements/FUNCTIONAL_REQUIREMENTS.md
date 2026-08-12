@@ -49,3 +49,59 @@ The following deviate from the original plan and supersede it — this section i
 
 ### Implementation Record
 - Plan: [`docs/plans/phase1-scaffolding-plan.md`](../plans/phase1-scaffolding-plan.md) — all steps checked off, status marked complete.
+
+## Phase 2: Environment Variable Developer Setup Scripts — ✅ COMPLETE (2026-08-12)
+
+**Source:** `docs/requirements/phase2-requirements.md` (Antigravity-owned input spec — see `.agents/rules/multi-agent-governance.md`), finalized here after clarification.
+
+### Goal
+Cross-platform developer setup scripts (`scripts/setup-env.ps1` for Windows, `scripts/setup-env.sh` for Linux) that scan `z-com-ai/*.txt`, resolve each file's content as a path relative to the current user's home directory, and persist the result as a Machine-level `NewAlbumsDiscovery__*` environment variable — so a Windows Service or Linux daemon running under a system account can read it. `z-com-ai/` is already `.gitignore`'d (`*z-com-ai` in `.gitignore`) and currently contains one input file, `sqlite-db-path.txt` (content: `DB`).
+
+### Decisions (confirmed with user 2026-08-12)
+1. **Filename → env var mapping: pure mechanical transform.** No manifest file, no lookup table. Algorithm: strip `.txt` → split remaining filename on `-` → PascalCase each segment (uppercase first character, lowercase the rest) → join with `__` → prefix `NewAlbumsDiscovery__`.
+   - Example: `sqlite-db-path.txt` → `NewAlbumsDiscovery__Sqlite__Db__Path`.
+   - **This deviates from the literal example in `phase2-requirements.md` §2** (`NewAlbumsDiscovery__Database__Path`), which was not a mechanical transform of the filename and could only be reproduced via a manifest/lookup table. The user explicitly chose the mechanical-transform approach (true zero-touch extensibility — §5) over reproducing that exact example, so this section is the authoritative name for `sqlite-db-path.txt` going forward. `docs/specs/technical-specs.md` should be treated as needing a matching update in a later docs pass if it references `Database__Path` directly.
+2. **Linux persistence target: `/etc/environment` + a systemd scaffold file.** The script upserts each variable into `/etc/environment` (read by PAM at login) **and** into `/etc/newalbumsdiscovery.env` (plain `KEY=value`, no quotes — forward-compatible with a future systemd unit's `EnvironmentFile=/etc/newalbumsdiscovery.env` directive). **Known gap, explicitly out of scope for this phase:** systemd-managed services do not inherit `/etc/environment` — wiring the actual daemon's unit file to read `/etc/newalbumsdiscovery.env` is deferred to the future deployment phase that creates the systemd unit.
+3. **Session refresh: yes, best-effort.** After the Machine-level write, both scripts also apply the same values to their own process environment for immediate feedback/verification. Documented platform asymmetry (see Design Notes) rather than silently promising something that doesn't fully work:
+   - **Windows:** running `.\scripts\setup-env.ps1` directly (not dot-sourced) executes in the *same* PowerShell process/session, and `$env:` writes are process-scoped — so the calling terminal sees the variable immediately with no special invocation needed.
+   - **Linux:** running `./scripts/setup-env.sh` executes in a **child process**; `export` there is invisible to the parent shell unless the script is `source`d (`source scripts/setup-env.sh`). The script detects whether it was sourced and prints a warning with the correct invocation if not.
+4. **No directory creation.** The script only resolves the path and persists the env var. Provisioning the actual folder (e.g. creating `%USERPROFILE%\DB`) is left to the application or the developer — out of scope here.
+
+### As-Built Corrections (discovered during implementation and testing)
+- **Real bug found and fixed in `setup-env.sh`: `return` inside a nested function cannot abort a sourced script.** The original design had a `fail()` helper that did `return 1` when `$SOURCED=1`. That `return` only unwinds `fail()`'s own call frame — it does **not** stop the sourced script itself, so a non-root + sourced run would print the error and then keep executing into privileged operations instead of stopping cleanly. Proven with an isolated repro (`source`d probe script continued past the "abort" point and printed an unreachable line) before being fixed. **Fix:** every abort/early-return point is now inlined directly at the script's own top level (not inside any helper function) — the `SOURCED`-conditional `return`/`exit` choice is repeated at each of the four exit points (root check, empty-directory, no-`.txt`-files, and the natural end) rather than centralized, because only a top-level `return` correctly unwinds a sourced script.
+- **Second finding, fixed alongside the first: sourcing leaked `set -euo pipefail` into the caller's shell.** Since `source` merges the sourced script's shell-option changes into the caller, a developer following the documented `source scripts/setup-env.sh` advice would have `errexit`/`nounset`/`pipefail` silently turned on in their own interactive shell afterward — a real surprise for anyone not expecting it. **Fix:** the script now snapshots the caller's shell options (`set +o`) before applying its own `set -euo pipefail`, and restores them via a `restore_shell_opts` helper at every exit point (this one *is* safely centralized in a function, since restoring global shell-option state doesn't have the same top-level-only constraint that aborting a sourced script does).
+- **Runtime-verified via WSL (Ubuntu), not just reviewed.** The original plan flagged the Linux script as "cannot be runtime-verified" in this Windows environment. WSL turned out to be available, so `setup-env.sh` was actually executed (as both a non-root and root user) rather than only reviewed: non-root+executed (blocked, exit 1, no writes), root+executed-not-sourced (persisted correctly, correct "not sourced" warning printed), root+sourced (persisted **and** immediately visible in that same shell via `$NewAlbumsDiscovery__Sqlite__Db__Path`), idempotent rerun (line count stayed at 1 in both `/etc/environment` and `/etc/newalbumsdiscovery.env`, no duplicates), and dynamic pickup of a second, temporary `.txt` file with zero script changes. All temporary test files/variables (Windows Machine scope and the WSL instance's `/etc/environment`/`/etc/newalbumsdiscovery.env`) were cleaned up afterward, except the real `NewAlbumsDiscovery__Sqlite__Db__Path` Machine value on this Windows machine, which the user chose to keep since it reflects real `z-com-ai/sqlite-db-path.txt` content.
+- **`setup-env.ps1`'s elevated path required a live UAC prompt to verify**, which an automated tool cannot click through. The user approved a `Start-Process -Verb RunAs` prompt in the moment to allow real verification (elevated set, non-elevated block, dynamic file pickup, safe rerun) rather than settling for code review only.
+
+### Design Notes (Solution-Architect-level implementation calls, not re-litigated with the user)
+- **Elevation is a hard gate, not a soft warning.** Both scripts check privilege *before* touching any file/registry state:
+  - Windows: `([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)`. If false, print instructions to re-run from an elevated PowerShell window and `exit 1` — no partial writes.
+  - Linux: `[ "$(id -u)" -eq 0 ]`. If false, print instructions to re-run with `sudo` and `exit 1` — no partial writes.
+- **Idempotent upsert, not blind append.** Rerunning either script (e.g. after editing a `.txt` file's content) must update the existing line for a given key rather than duplicating it — applies to `[Environment]::SetEnvironmentVariable` (naturally idempotent) and to both Linux env files (find-existing-key-and-replace, else append).
+- **Path resolution uses proper path-combine APIs** (`Join-Path` / equivalent), not naive string concatenation, so trailing slashes or separator style in the `.txt` content don't break the result.
+- **`z-com-ai/` location is resolved relative to the script's own location** (`$PSScriptRoot\..\z-com-ai` / `$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../z-com-ai`), not the caller's current working directory, so the scripts work regardless of where they're invoked from.
+- **Assumption:** resolved paths do not contain the `|` character (used as the sed delimiter for the Linux upsert) or literal newlines. Spaces are fine. Not defended against exotic inputs — acceptable for this narrow scope.
+
+### In Scope
+- `scripts/setup-env.ps1` — Windows setup script per the above.
+- `scripts/setup-env.sh` — Linux setup script per the above.
+- Elevation/privilege checks in both, gating all writes.
+- Dynamic enumeration of `z-com-ai/*.txt` (adding a new `.txt` file requires zero script changes, per §5 of the source spec).
+
+### Out of Scope (future phases)
+- Any systemd unit file / service installation (the `/etc/newalbumsdiscovery.env` scaffold is prepared for it, not consumed by it yet).
+- Any change to `docs/specs/technical-specs.md`'s example env var names.
+- Uninstall/rollback script (removing previously-set machine variables).
+- Validating or creating the resolved directory.
+- CI or automated testing of the scripts (they require elevated/root execution and machine-level state mutation, which isn't practical to sandbox in this phase).
+
+### Acceptance Criteria — all verified ✅
+- Running `scripts/setup-env.ps1` from an elevated PowerShell window sets `NewAlbumsDiscovery__Sqlite__Db__Path` at Machine scope to `<USERPROFILE>\DB`, visible via `[Environment]::GetEnvironmentVariable(..., "Machine")` and in the same terminal via `$env:NewAlbumsDiscovery__Sqlite__Db__Path`. **Verified** on this machine via a user-approved elevated relaunch.
+- Running `scripts/setup-env.ps1` from a non-elevated window prints a clear instruction and exits non-zero without setting anything. **Verified.**
+- Running `source scripts/setup-env.sh` as root updates `/etc/environment` and `/etc/newalbumsdiscovery.env` with `NewAlbumsDiscovery__Sqlite__Db__Path=<$HOME>/DB` and exports it into the current shell. **Verified** via WSL (Ubuntu).
+- Running `scripts/setup-env.sh` (not sourced, or not root) prints the appropriate corrective instruction and exits non-zero without partial writes. **Verified** via WSL, including the non-root+sourced combination that surfaced the `return`-in-nested-function bug described above — re-verified clean after the fix.
+- Rerunning either script after changing `z-com-ai/sqlite-db-path.txt`'s content updates the existing variable/line in place — no duplicate entries in `/etc/environment` or `/etc/newalbumsdiscovery.env`. **Verified** on both platforms (Windows: inherently idempotent via `SetEnvironmentVariable`; Linux: line count confirmed to stay at 1 after rerun).
+- Adding a second `.txt` file (e.g. `gemini-api-key.txt`) to `z-com-ai/` and rerunning either script picks it up automatically as `NewAlbumsDiscovery__Gemini__Api__Key`, with no script edits. **Verified** on both platforms; temporary file and variables removed afterward.
+
+### Implementation Record
+- Plan: [`docs/plans/phase2-env-setup-scripts-plan.md`](../plans/phase2-env-setup-scripts-plan.md) — all steps checked off, status marked complete.
