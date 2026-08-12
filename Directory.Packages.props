@@ -1,11 +1,19 @@
 <Project>
-
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageVersion Include="MediatR" Version="12.4.1" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0" />
+    <!-- Pinned above the version EF Core 10.0.0 pulls transitively (2.1.11) to fix CVE-2025-6965
+         (bundled SQLite < 3.50.2, memory corruption). -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+    <!-- Pinned above the version Microsoft.EntityFrameworkCore.Design 10.0.0 pulls transitively
+         (9.0.0) to fix several known high-severity System.Security.Cryptography.Xml CVEs. Design-time
+         only (PrivateAssets="all" on the Design package), never ships to the running application. -->
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.8" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.8" />
@@ -15,5 +23,4 @@
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
   </ItemGroup>
-
 </Project>
