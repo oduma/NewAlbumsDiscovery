@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
+using NewAlbumsDiscovery.Application.AIDiscovery.Prompts;
 using NewAlbumsDiscovery.Application.MusicAggregator;
+using NewAlbumsDiscovery.Infrastructure.Gemini;
 using NewAlbumsDiscovery.Infrastructure.MusicAggregator;
 using NewAlbumsDiscovery.Infrastructure.Notifications;
 using NewAlbumsDiscovery.Infrastructure.Sqlite;
@@ -43,6 +45,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ILovedTrackRepository, LovedTrackRepository>();
         services.AddScoped<IAggregatedBucketRepository, AggregatedBucketRepository>();
         services.AddSingleton<ICountryMasterDataProvider, EmbeddedCountryMasterDataProvider>();
+        services.AddSingleton<IPromptTemplateProvider, EmbeddedPromptTemplateProvider>();
 
         services.AddScoped<IDiscoveryNotifier, ConsoleDiscoveryNotifier>();
 

@@ -103,4 +103,36 @@ public class AggregatedBucketTests
 
         Assert.False(bucket.Equals(new object()));
     }
+
+    [Fact]
+    public void IsInstrumental_WithExactMatch_ReturnsTrue()
+    {
+        var bucket = AggregatedBucket.Create("Romania/Instrumental", BucketType.CountryLanguage, "Romania", "Instrumental", null, 5, AsOfUtc);
+
+        Assert.True(bucket.IsInstrumental);
+    }
+
+    [Fact]
+    public void IsInstrumental_WithDifferentCase_ReturnsFalse()
+    {
+        var bucket = AggregatedBucket.Create("Romania/instrumental", BucketType.CountryLanguage, "Romania", "instrumental", null, 5, AsOfUtc);
+
+        Assert.False(bucket.IsInstrumental);
+    }
+
+    [Fact]
+    public void IsInstrumental_WithNullLanguage_ReturnsFalse()
+    {
+        var bucket = AggregatedBucket.Create("Romania", BucketType.Country, "Romania", null, null, 5, AsOfUtc);
+
+        Assert.False(bucket.IsInstrumental);
+    }
+
+    [Fact]
+    public void IsInstrumental_WithOtherLanguage_ReturnsFalse()
+    {
+        var bucket = AggregatedBucket.Create("Romania/English", BucketType.CountryLanguage, "Romania", "English", null, 5, AsOfUtc);
+
+        Assert.False(bucket.IsInstrumental);
+    }
 }

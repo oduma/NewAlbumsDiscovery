@@ -4,6 +4,7 @@ using NewAlbumsDiscovery.Application.AIDiscovery;
 using NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 using NewAlbumsDiscovery.Application.CoreOperations;
 using NewAlbumsDiscovery.Application.MusicAggregator;
+using NewAlbumsDiscovery.Domain.AIDiscovery;
 using NewAlbumsDiscovery.Domain.MusicAggregator;
 using NewAlbumsDiscovery.Domain.MusicAggregator.Filtering;
 
@@ -31,13 +32,22 @@ public static class ApplicationServiceCollectionExtensions
 
         services.Configure<AIDiscoveryOptions>(configuration.GetSection("NewAlbumsDiscovery:AIDiscovery"));
 
+        services.AddSingleton<PromptRenderer>();
+        services.AddSingleton<TimeframeFormatter>();
+
         // Registration order is load-bearing: IEnumerable<IAIDiscoveryStage> resolves in the exact
         // order stages are registered below (documented Microsoft.Extensions.DependencyInjection
         // behavior), and that order IS the pipeline's execution order (Stage 1 -> Stage 2 -> Stage 3).
         services.AddScoped<IAIDiscoveryStage, StartNotificationStage>();
         services.AddScoped<IAIDiscoveryStage, BucketProcessingStage>();
         services.AddScoped<IAIDiscoveryStage, ReportPublicationStage>();
+
+        // Registration order is load-bearing: IEnumerable<IBucketProcessingStep> resolves in this
+        // exact order. The standard name/track-count print always runs first, then Prompt 1
+        // (genre expansion, no-ops unless the bucket has a Genre), then Prompt 2 (discovery query).
         services.AddScoped<IBucketProcessingStep, PrintBucketStep>();
+        services.AddScoped<IBucketProcessingStep, GenreExpansionPromptStep>();
+        services.AddScoped<IBucketProcessingStep, DiscoveryQueryPromptStep>();
 
         services.Configure<CoreOperationsOptions>(configuration.GetSection("NewAlbumsDiscovery:CoreOperations"));
 

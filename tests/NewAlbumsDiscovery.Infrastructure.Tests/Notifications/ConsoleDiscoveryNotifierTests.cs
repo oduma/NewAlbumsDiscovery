@@ -54,4 +54,18 @@ public class ConsoleDiscoveryNotifierTests
 
         Assert.Contains("4", output);
     }
+
+    [Fact]
+    public async Task NotifyPromptRenderedAsync_WritesHeaderThenContent()
+    {
+        var notifier = new ConsoleDiscoveryNotifier();
+
+        var output = await CaptureConsoleOutputAsync(
+            () => notifier.NotifyPromptRenderedAsync("--- PROMPT 2: DISCOVERY QUERY ---", "rendered prompt body", CancellationToken.None));
+
+        var headerIndex = output.IndexOf("--- PROMPT 2: DISCOVERY QUERY ---", StringComparison.Ordinal);
+        var contentIndex = output.IndexOf("rendered prompt body", StringComparison.Ordinal);
+        Assert.True(headerIndex >= 0);
+        Assert.True(contentIndex > headerIndex);
+    }
 }

@@ -8,7 +8,16 @@ namespace NewAlbumsDiscovery.Application.Tests.TestSupport;
 /// </summary>
 public sealed class RecordingTimeProvider : TimeProvider
 {
+    private readonly DateTimeOffset _utcNow;
+
     public List<TimeSpan> Delays { get; } = [];
+
+    public RecordingTimeProvider(DateTimeOffset? utcNow = null)
+    {
+        _utcNow = utcNow ?? DateTimeOffset.UtcNow;
+    }
+
+    public override DateTimeOffset GetUtcNow() => _utcNow;
 
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {

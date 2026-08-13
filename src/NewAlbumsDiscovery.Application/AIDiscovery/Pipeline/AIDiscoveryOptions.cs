@@ -7,4 +7,6 @@ namespace NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 public sealed class AIDiscoveryOptions
 {
     public int InterBucketDelaySeconds { get; set; } = 10;
+
+    public int MaxAlbumsPerQuery { get; set; } = 20;
 }

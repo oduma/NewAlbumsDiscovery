@@ -26,4 +26,11 @@ public sealed class ConsoleDiscoveryNotifier : IDiscoveryNotifier
         Console.WriteLine($"AIDiscovery: completed. {processedBucketCount} bucket(s) processed.");
         return Task.CompletedTask;
     }
+
+    public Task NotifyPromptRenderedAsync(string header, string promptContent, CancellationToken cancellationToken)
+    {
+        Console.WriteLine(header);
+        Console.WriteLine(promptContent);
+        return Task.CompletedTask;
+    }
 }
