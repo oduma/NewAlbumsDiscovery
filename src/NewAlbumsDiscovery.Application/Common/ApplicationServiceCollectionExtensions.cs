@@ -5,6 +5,7 @@ using NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 using NewAlbumsDiscovery.Application.CoreOperations;
 using NewAlbumsDiscovery.Application.MusicAggregator;
 using NewAlbumsDiscovery.Domain.MusicAggregator;
+using NewAlbumsDiscovery.Domain.MusicAggregator.Filtering;
 
 namespace NewAlbumsDiscovery.Application.Common;
 
@@ -17,7 +18,14 @@ public static class ApplicationServiceCollectionExtensions
 
         services.Configure<AggregatorSettings>(configuration.GetSection("NewAlbumsDiscovery:Aggregator"));
         services.AddSingleton<BucketAggregatorEngine>();
+        services.AddSingleton<CountryNormalizer>();
         services.AddSingleton(TimeProvider.System);
+
+        // Registration order is load-bearing: IEnumerable<IBucketFilterRule> resolves in this exact
+        // order. InvalidCountryDeletionRule must run before ContinentFallbackEliminationRule so
+        // continent-fallback evidence is only evaluated against already-validated country buckets.
+        services.AddScoped<IBucketFilterRule, InvalidCountryDeletionRule>();
+        services.AddScoped<IBucketFilterRule, ContinentFallbackEliminationRule>();
 
         services.Configure<GeminiOptions>(configuration.GetSection("NewAlbumsDiscovery:Gemini"));
 

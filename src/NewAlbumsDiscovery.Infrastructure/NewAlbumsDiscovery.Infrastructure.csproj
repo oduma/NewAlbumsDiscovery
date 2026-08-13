@@ -17,5 +17,6 @@
   <ItemGroup>
     <EmbeddedResource Include="Gemini\Prompts\*.md" />
     <EmbeddedResource Include="Gemini\Assets\*.json" />
+    <EmbeddedResource Include="MusicAggregator\Assets\*.json" />
   </ItemGroup>
 </Project>

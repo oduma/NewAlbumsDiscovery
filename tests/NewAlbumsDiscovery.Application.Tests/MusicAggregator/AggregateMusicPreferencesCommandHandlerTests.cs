@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using NewAlbumsDiscovery.Application.MusicAggregator;
 using NewAlbumsDiscovery.Domain.MusicAggregator;
+using NewAlbumsDiscovery.Domain.MusicAggregator.Filtering;
 
 namespace NewAlbumsDiscovery.Application.Tests.MusicAggregator;
 
@@ -14,16 +15,33 @@ public class AggregateMusicPreferencesCommandHandlerTests
         public override DateTimeOffset GetUtcNow() => FixedNow;
     }
 
+    private static Mock<ICountryMasterDataProvider> NoOpMasterDataProvider()
+    {
+        var provider = new Mock<ICountryMasterDataProvider>();
+        provider
+            .Setup(p => p.GetCountrySynonymsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+        provider
+            .Setup(p => p.GetCountryMasterDataAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CountryMasterData(new Dictionary<string, CountryMasterDataEntry>()));
+        return provider;
+    }
+
     private static AggregateMusicPreferencesCommandHandler CreateHandler(
         Mock<ILovedTrackRepository> lovedTrackRepository,
         Mock<IAggregatedBucketRepository> aggregatedBucketRepository,
-        AggregatorSettings? settings = null)
+        AggregatorSettings? settings = null,
+        Mock<ICountryMasterDataProvider>? countryMasterDataProvider = null,
+        IEnumerable<IBucketFilterRule>? filterRules = null)
         => new(
             lovedTrackRepository.Object,
             aggregatedBucketRepository.Object,
             new BucketAggregatorEngine(),
             Options.Create(settings ?? new AggregatorSettings()),
-            new FixedTimeProvider());
+            new FixedTimeProvider(),
+            (countryMasterDataProvider ?? NoOpMasterDataProvider()).Object,
+            new CountryNormalizer(),
+            filterRules ?? []);
 
     private static Mock<IAggregatedBucketRepository> CapturingAggregatedBucketRepository(out Func<IReadOnlyList<AggregatedBucket>?> getPersisted)
     {
@@ -156,5 +174,90 @@ public class AggregateMusicPreferencesCommandHandlerTests
         lovedTrackRepository.Verify(r => r.GetAllAsync(cts.Token), Times.Once);
         aggregatedBucketRepository.Verify(
             r => r.ReplaceAllAsync(It.IsAny<IReadOnlyList<AggregatedBucket>>(), cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_NormalizesTrackCountriesBeforeAggregating()
+    {
+        var lovedTrackRepository = new Mock<ILovedTrackRepository>();
+        var tracks = Enumerable.Range(0, 2)
+            .Select(_ => new LovedTrackPreferences("United States", ["English"], ["Rock"]))
+            .ToList();
+        lovedTrackRepository.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(tracks);
+
+        var masterDataProvider = NoOpMasterDataProvider();
+        masterDataProvider
+            .Setup(p => p.GetCountrySynonymsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string> { ["United States"] = "USA" });
+
+        var aggregatedBucketRepository = CapturingAggregatedBucketRepository(out var getPersisted);
+        var handler = CreateHandler(lovedTrackRepository, aggregatedBucketRepository,
+            new AggregatorSettings { CountryRegionThreshold = 10, CountryRegionLanguageThreshold = 10, MinimumBucketThreshold = 2 },
+            countryMasterDataProvider: masterDataProvider);
+
+        await handler.Handle(new AggregateMusicPreferencesCommand(), CancellationToken.None);
+
+        var bucket = Assert.Single(getPersisted()!);
+        Assert.Equal("USA", bucket.Country);
+    }
+
+    [Fact]
+    public async Task Handle_FoldsBucketsThroughFilterRulesInRegisteredOrder()
+    {
+        var lovedTrackRepository = new Mock<ILovedTrackRepository>();
+        var tracks = Enumerable.Range(0, 2)
+            .Select(_ => new LovedTrackPreferences("Malta", ["Maltese"], ["Folk"]))
+            .ToList();
+        lovedTrackRepository.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(tracks);
+
+        var callOrder = new List<string>();
+        var firstRule = new Mock<IBucketFilterRule>();
+        firstRule
+            .Setup(r => r.Apply(It.IsAny<IReadOnlyList<AggregatedBucket>>(), It.IsAny<CountryMasterData>()))
+            .Returns((IReadOnlyList<AggregatedBucket> buckets, CountryMasterData _) =>
+            {
+                callOrder.Add("first");
+                return buckets;
+            });
+        var secondRule = new Mock<IBucketFilterRule>();
+        secondRule
+            .Setup(r => r.Apply(It.IsAny<IReadOnlyList<AggregatedBucket>>(), It.IsAny<CountryMasterData>()))
+            .Returns((IReadOnlyList<AggregatedBucket> buckets, CountryMasterData _) =>
+            {
+                callOrder.Add("second");
+                return Array.Empty<AggregatedBucket>();
+            });
+
+        var aggregatedBucketRepository = CapturingAggregatedBucketRepository(out var getPersisted);
+        var handler = CreateHandler(lovedTrackRepository, aggregatedBucketRepository,
+            new AggregatorSettings { CountryRegionThreshold = 10, CountryRegionLanguageThreshold = 10, MinimumBucketThreshold = 2 },
+            filterRules: [firstRule.Object, secondRule.Object]);
+
+        await handler.Handle(new AggregateMusicPreferencesCommand(), CancellationToken.None);
+
+        Assert.Equal(["first", "second"], callOrder);
+        Assert.Empty(getPersisted()!);
+    }
+
+    [Fact]
+    public async Task Handle_PassesCancellationTokenToCountryMasterDataProvider()
+    {
+        var lovedTrackRepository = new Mock<ILovedTrackRepository>();
+        lovedTrackRepository
+            .Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<LovedTrackPreferences>());
+        var aggregatedBucketRepository = new Mock<IAggregatedBucketRepository>();
+        aggregatedBucketRepository
+            .Setup(r => r.ReplaceAllAsync(It.IsAny<IReadOnlyList<AggregatedBucket>>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var masterDataProvider = NoOpMasterDataProvider();
+        var handler = CreateHandler(lovedTrackRepository, aggregatedBucketRepository, countryMasterDataProvider: masterDataProvider);
+
+        using var cts = new CancellationTokenSource();
+
+        await handler.Handle(new AggregateMusicPreferencesCommand(), cts.Token);
+
+        masterDataProvider.Verify(p => p.GetCountrySynonymsAsync(cts.Token), Times.Once);
+        masterDataProvider.Verify(p => p.GetCountryMasterDataAsync(cts.Token), Times.Once);
     }
 }
