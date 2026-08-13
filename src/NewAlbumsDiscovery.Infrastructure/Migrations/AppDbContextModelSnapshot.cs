@@ -17,38 +17,6 @@ namespace NewAlbumsDiscovery.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
 
-            modelBuilder.Entity("NewAlbumsDiscovery.Domain.AIDiscovery.DiscoveredAlbum", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Album")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Artist")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Country")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("DiscoveredAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Genre")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Language")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("DiscoveredAlbums", (string)null);
-                });
-
             modelBuilder.Entity("NewAlbumsDiscovery.Domain.MusicAggregator.AggregatedBucket", b =>
                 {
                     b.Property<Guid>("Id")

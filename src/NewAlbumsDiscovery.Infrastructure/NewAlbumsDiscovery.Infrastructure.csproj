@@ -9,7 +9,6 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Mscc.GenerativeAI" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     <PackageReference Include="System.Security.Cryptography.Xml">
       <PrivateAssets>all</PrivateAssets>
@@ -17,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Gemini\Prompts\*.md" />
+    <EmbeddedResource Include="Gemini\Assets\*.json" />
   </ItemGroup>
 </Project>

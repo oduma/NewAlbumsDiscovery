@@ -1,6 +1,6 @@
 # Phase 4 Implementation Plan: Generative AI Engine Integration (Gemini)
 
-**Status:** ✅ COMPLETE (2026-08-13) — all steps below implemented and automated-tested; Step 8's live-Gemini-API manual sub-item was not performed (see that step and FUNCTIONAL_REQUIREMENTS.md → Phase 4 → Acceptance Criteria for the explicit caveat).
+**Status:** ⏪ ROLLED BACK (2026-08-13) — originally shipped complete (all steps below implemented and automated-tested), then deleted at the user's explicit request after Phase 5 established the pipeline architecture this should have been built inside. See FUNCTIONAL_REQUIREMENTS.md → Phase 4 → Rollback for exactly what was deleted vs. kept (`GeminiOptions.Model` + the API key config path). Everything below describes what was originally built and no longer reflects the codebase.
 **Requirements:** [`docs/requirements/FUNCTIONAL_REQUIREMENTS.md`](../requirements/FUNCTIONAL_REQUIREMENTS.md) → Phase 4
 
 Strict TDD (`docs/constitution/tdd.md`): every step below writes a failing test before the implementation that makes it pass. Domain and Application code must reach 100% branch coverage; the thin `IGeminiApiClient` SDK wrapper is the one exempted Infrastructure edge (same treatment `AppDbContext`/`LovedTrackDbContext` got in Phase 3).

@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using NewAlbumsDiscovery.Domain.AIDiscovery;
 using NewAlbumsDiscovery.Domain.MusicAggregator;
 
 namespace NewAlbumsDiscovery.Infrastructure.Sqlite;
@@ -19,8 +18,6 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<AggregatedBucket> AggregatedBuckets => Set<AggregatedBucket>();
 
-    public DbSet<DiscoveredAlbum> DiscoveredAlbums => Set<DiscoveredAlbum>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AggregatedBucket>(entity =>
@@ -34,18 +31,6 @@ public sealed class AppDbContext : DbContext
             entity.Property(bucket => bucket.Genre);
             entity.Property(bucket => bucket.TrackCount).IsRequired();
             entity.Property(bucket => bucket.CreatedAtUtc).IsRequired();
-        });
-
-        modelBuilder.Entity<DiscoveredAlbum>(entity =>
-        {
-            entity.ToTable("DiscoveredAlbums");
-            entity.HasKey(album => album.Id);
-            entity.Property(album => album.Artist).IsRequired();
-            entity.Property(album => album.Album).IsRequired();
-            entity.Property(album => album.Country).IsRequired();
-            entity.Property(album => album.Language);
-            entity.Property(album => album.Genre);
-            entity.Property(album => album.DiscoveredAtUtc).IsRequired();
         });
     }
 }

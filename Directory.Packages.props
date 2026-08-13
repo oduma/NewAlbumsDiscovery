@@ -9,7 +9,6 @@
     <!-- Pinned above the version EF Core 10.0.0 pulls transitively (2.1.11) to fix CVE-2025-6965
          (bundled SQLite < 3.50.2, memory corruption). -->
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
-    <PackageVersion Include="Mscc.GenerativeAI" Version="3.1.0" />
     <!-- Pinned above the version Microsoft.EntityFrameworkCore.Design 10.0.0 pulls transitively
          (9.0.0) to fix several known high-severity System.Security.Cryptography.Xml CVEs. Design-time
          only (PrivateAssets="all" on the Design package), never ships to the running application. -->

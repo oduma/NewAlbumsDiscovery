@@ -18,13 +18,13 @@ var host = Host.CreateDefaultBuilder(args)
             .AddApplicationServices(context.Configuration)
             .AddInfrastructureServices(context.Configuration)
             .AddHostedService<HeartbeatWorker>()
-            .AddHostedService<AggregationStartupWorker>();
+            .AddHostedService<OrchestrationStartupWorker>();
     })
     .Build();
 
 // Applied once at startup, before any hosted service can touch AppDbContext, so
 // new-albums-discovery.db and its AggregatedBuckets table always exist by the time
-// AggregationStartupWorker runs (docs/requirements/FUNCTIONAL_REQUIREMENTS.md → Phase 3 decision #3).
+// OrchestrationStartupWorker runs (docs/requirements/FUNCTIONAL_REQUIREMENTS.md → Phase 3 decision #3).
 using (var scope = host.Services.CreateScope())
 {
     scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
