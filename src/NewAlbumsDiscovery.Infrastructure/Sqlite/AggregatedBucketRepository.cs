@@ -28,4 +28,7 @@ public sealed class AggregatedBucketRepository : IAggregatedBucketRepository
 
         await transaction.CommitAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<AggregatedBucket>> GetAllAsync(CancellationToken cancellationToken)
+        => await _dbContext.AggregatedBuckets.AsNoTracking().ToListAsync(cancellationToken);
 }

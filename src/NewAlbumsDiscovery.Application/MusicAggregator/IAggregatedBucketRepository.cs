@@ -10,4 +10,6 @@ namespace NewAlbumsDiscovery.Application.MusicAggregator;
 public interface IAggregatedBucketRepository
 {
     Task ReplaceAllAsync(IReadOnlyList<AggregatedBucket> buckets, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<AggregatedBucket>> GetAllAsync(CancellationToken cancellationToken);
 }

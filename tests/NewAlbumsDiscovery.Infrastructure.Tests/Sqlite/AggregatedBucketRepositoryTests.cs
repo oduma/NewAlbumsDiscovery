@@ -92,4 +92,19 @@ public sealed class AggregatedBucketRepositoryTests : IDisposable
 
         Assert.Empty(stored);
     }
+
+    [Fact]
+    public async Task GetAllAsync_ReturnsExactlyWhatReplaceAllAsyncLastWrote()
+    {
+        await using (var context = CreateContext())
+        {
+            await new AggregatedBucketRepository(context).ReplaceAllAsync(
+                [Bucket("Romania", 5), Bucket("Malta", 2)], CancellationToken.None);
+        }
+
+        await using var readContext = CreateContext();
+        var stored = await new AggregatedBucketRepository(readContext).GetAllAsync(CancellationToken.None);
+
+        Assert.Equal(2, stored.Count);
+    }
 }

@@ -17,9 +17,15 @@
 #   Examples:
 #     sqlite-db-path.txt                  -> NewAlbumsDiscovery__Sqlite__Db__Path
 #     database-loved_tracks_db_path.txt   -> NewAlbumsDiscovery__Database__LovedTracksDbPath
+#     gemini_api_key.txt                  -> NewAlbumsDiscovery__GeminiApiKey
 #
-# File content is treated as a path relative to $HOME. Use forward slashes ('/') as the
-# separator regardless of OS - this script joins paths with '/' directly (no path-combine API).
+# File content -> env var VALUE (Phase 4 addition, filename-suffix branch):
+#   - Files ending in '_path.txt': content is treated as a path relative to $HOME and resolved
+#     to an absolute path (original Phase 2 behavior). Use forward slashes ('/') as the
+#     separator regardless of OS - this script joins paths with '/' directly (no path-combine
+#     API).
+#   - All other files: content is persisted verbatim (trimmed) as the variable value - no path
+#     resolution. Used for raw secrets like the Gemini API key.
 #
 # Must be run as root (sudo) - machine-wide persistence requires it. Must be *sourced*
 # (`source scripts/setup-env.sh`) for the current shell to see the new variables immediately;
@@ -166,24 +172,31 @@ for f in "${files[@]}"; do
     base_name="${filename%.txt}"
     var_name="$(to_env_var_name "$base_name")"
 
-    relative_path=""
-    IFS= read -r relative_path < "$f" || true
-    relative_path="$(printf '%s' "$relative_path" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\r$//')"
+    content=""
+    IFS= read -r content < "$f" || true
+    content="$(printf '%s' "$content" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\r$//')"
 
-    if [ -z "$relative_path" ]; then
+    if [ -z "$content" ]; then
         echo "Skipping $filename: file is empty." >&2
         continue
     fi
 
-    relative_path="${relative_path#/}"
-    relative_path="${relative_path%/}"
-    abs_path="${HOME%/}/$relative_path"
+    case "$filename" in
+        *_path.txt)
+            relative_path="${content#/}"
+            relative_path="${relative_path%/}"
+            value="${HOME%/}/$relative_path"
+            ;;
+        *)
+            value="$content"
+            ;;
+    esac
 
-    upsert_env_file /etc/environment "$var_name" "$abs_path"
-    upsert_env_file "$SYSTEMD_SCAFFOLD_FILE" "$var_name" "$abs_path"
-    export "$var_name=$abs_path"
+    upsert_env_file /etc/environment "$var_name" "$value"
+    upsert_env_file "$SYSTEMD_SCAFFOLD_FILE" "$var_name" "$value"
+    export "$var_name=$value"
 
-    echo "Set $var_name = $abs_path (/etc/environment + $SYSTEMD_SCAFFOLD_FILE)"
+    echo "Set $var_name = $value (/etc/environment + $SYSTEMD_SCAFFOLD_FILE)"
     processed_count=$((processed_count + 1))
 done
 

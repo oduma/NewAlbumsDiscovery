@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using NewAlbumsDiscovery.Application.AIDiscovery;
 using NewAlbumsDiscovery.Application.MusicAggregator;
+using NewAlbumsDiscovery.Infrastructure.Gemini;
 using NewAlbumsDiscovery.Infrastructure.Sqlite;
 
 namespace NewAlbumsDiscovery.Infrastructure;
@@ -39,6 +42,18 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<ILovedTrackRepository, LovedTrackRepository>();
         services.AddScoped<IAggregatedBucketRepository, AggregatedBucketRepository>();
+
+        var geminiApiKey = configuration["NewAlbumsDiscovery:GeminiApiKey"];
+        if (string.IsNullOrWhiteSpace(geminiApiKey))
+        {
+            throw new InvalidOperationException(
+                "NewAlbumsDiscovery__GeminiApiKey is not set. It must contain a valid Gemini API key.");
+        }
+
+        services.AddScoped<IGeminiApiClient>(sp =>
+            new GeminiApiClient(geminiApiKey, sp.GetRequiredService<IOptions<GeminiOptions>>().Value.Model));
+        services.AddScoped<IGeminiDiscoveryClient, GeminiDiscoveryClient>();
+        services.AddScoped<IDiscoveredAlbumRepository, DiscoveredAlbumRepository>();
 
         return services;
     }

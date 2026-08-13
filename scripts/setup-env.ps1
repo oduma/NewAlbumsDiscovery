@@ -15,10 +15,15 @@ Filename -> env var name (mechanical transform):
   Examples:
     sqlite-db-path.txt                    -> NewAlbumsDiscovery__Sqlite__Db__Path
     database-loved_tracks_db_path.txt     -> NewAlbumsDiscovery__Database__LovedTracksDbPath
+    gemini_api_key.txt                    -> NewAlbumsDiscovery__GeminiApiKey
 
-File content is treated as a path relative to $env:USERPROFILE. Use forward slashes ('/') in
-the file content regardless of OS - Join-Path accepts them on Windows, and content is shared
-in spirit with the Linux script, which requires '/' as its separator.
+File content -> env var VALUE (Phase 4 addition, filename-suffix branch):
+  - Files ending in '_path.txt': content is treated as a path relative to $env:USERPROFILE
+    and resolved to an absolute path (original Phase 2 behavior). Use forward slashes ('/')
+    in the file content regardless of OS - Join-Path accepts them on Windows, and content is
+    shared in spirit with the Linux script, which requires '/' as its separator.
+  - All other files: content is persisted verbatim (trimmed) as the variable value - no path
+    resolution. Used for raw secrets like the Gemini API key.
 
 Must be run from an elevated (Administrator) PowerShell window - Machine-scope environment
 variables cannot be set otherwise. Run normally (not dot-sourced); $env: writes are
@@ -79,20 +84,24 @@ if (-not $files -or $files.Count -eq 0) {
 $processedCount = 0
 foreach ($file in $files) {
     $varName = ConvertTo-EnvVarName -FileBaseName $file.BaseName
-    $relativePath = (Get-Content -Path $file.FullName -Raw -ErrorAction Stop)
-    if ($null -ne $relativePath) { $relativePath = $relativePath.Trim() }
+    $content = (Get-Content -Path $file.FullName -Raw -ErrorAction Stop)
+    if ($null -ne $content) { $content = $content.Trim() }
 
-    if ([string]::IsNullOrWhiteSpace($relativePath)) {
+    if ([string]::IsNullOrWhiteSpace($content)) {
         Write-Warning "Skipping $($file.Name): file is empty."
         continue
     }
 
-    $absolutePath = Join-Path $env:USERPROFILE $relativePath
+    if ($file.Name -like '*_path.txt') {
+        $value = Join-Path $env:USERPROFILE $content
+    } else {
+        $value = $content
+    }
 
-    [Environment]::SetEnvironmentVariable($varName, $absolutePath, 'Machine')
-    Set-Item -Path "Env:$varName" -Value $absolutePath
+    [Environment]::SetEnvironmentVariable($varName, $value, 'Machine')
+    Set-Item -Path "Env:$varName" -Value $value
 
-    Write-Host "Set $varName = $absolutePath (Machine)" -ForegroundColor Green
+    Write-Host "Set $varName = $value (Machine)" -ForegroundColor Green
     $processedCount++
 }
 
