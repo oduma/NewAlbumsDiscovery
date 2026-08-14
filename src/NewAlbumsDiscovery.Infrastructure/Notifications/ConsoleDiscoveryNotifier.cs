@@ -21,9 +21,15 @@ public sealed class ConsoleDiscoveryNotifier : IDiscoveryNotifier
         return Task.CompletedTask;
     }
 
-    public Task NotifyPipelineCompletedAsync(int processedBucketCount, CancellationToken cancellationToken)
+    public Task NotifyBucketAbandonedAsync(string bucketName, int trackCount, string reason, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"AIDiscovery: completed. {processedBucketCount} bucket(s) processed.");
+        Console.WriteLine($"AIDiscovery: bucket '{bucketName}' ({trackCount} track(s)) ABANDONED - {reason}");
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyPipelineCompletedAsync(int processedBucketCount, int abandonedBucketCount, CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"Pipeline Complete. Total Buckets Processed: {processedBucketCount} | Total Buckets Abandoned: {abandonedBucketCount}");
         return Task.CompletedTask;
     }
 

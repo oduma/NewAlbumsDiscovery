@@ -9,5 +9,5 @@ namespace NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 /// </summary>
 public interface IBucketProcessingStep
 {
-    Task ProcessAsync(AggregatedBucket bucket, CancellationToken cancellationToken);
+    Task ProcessAsync(AggregatedBucket bucket, BucketProcessingState state, CancellationToken cancellationToken);
 }

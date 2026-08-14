@@ -1,14 +1,15 @@
 namespace NewAlbumsDiscovery.Application.AIDiscovery;
 
 /// <summary>
-/// Bound from configuration section "NewAlbumsDiscovery:Gemini". Trimmed to just the model name
-/// after Phase 4's actual Gemini-calling code was rolled back (docs/requirements/
-/// FUNCTIONAL_REQUIREMENTS.md → Phase 4 → Rollback) — kept as scaffolding for whichever future
-/// phase rebuilds real Gemini calls inside Phase 5's pipeline. The API key itself is not a
-/// property here — it's read directly from the flat "NewAlbumsDiscovery:GeminiApiKey" config
-/// path, the same way LovedTracksDbPath/AppDbPath are, since it lives outside this nested section.
+/// Bound from configuration section "NewAlbumsDiscovery:Gemini". The API key itself is not a
+/// property here - it's read directly from the flat "NewAlbumsDiscovery:GeminiApiKey" config
+/// path by the Infrastructure adapter that calls Gemini, the same way LovedTracksDbPath/AppDbPath
+/// are read, since it lives outside this nested section (docs/requirements/
+/// FUNCTIONAL_REQUIREMENTS.md → Phase 9).
 /// </summary>
 public sealed class GeminiOptions
 {
-    public string Model { get; set; } = "gemini-1.5-flash";
+    public string Model { get; set; } = "gemini-3.5-flash";
+
+    public int[] RetryBackoffSeconds { get; set; } = [10, 30, 180];
 }

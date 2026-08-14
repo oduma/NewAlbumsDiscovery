@@ -3,10 +3,12 @@ using Microsoft.Extensions.Options;
 namespace NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 
 /// <summary>
-/// Stage 2 (docs/requirements/FUNCTIONAL_REQUIREMENTS.md → Phase 5 §3.3): visits every bucket in
-/// the context's already-sorted order, running each through the ordered list of
-/// IBucketProcessingStep implementations, pacing InterBucketDelaySeconds between buckets — never
-/// after the last one.
+/// Stage 2 (docs/requirements/FUNCTIONAL_REQUIREMENTS.md → Phase 5 §3.3, extended in Phase 9):
+/// visits every bucket in the context's already-sorted order, running each through the ordered
+/// list of IBucketProcessingStep implementations against a fresh per-bucket BucketProcessingState,
+/// pacing InterBucketDelaySeconds between buckets — never after the last one. If a step abandons
+/// the bucket (state.IsAbandoned), remaining steps for that bucket are skipped and the bucket is
+/// tallied in AbandonedBucketCount.
 /// </summary>
 public sealed class BucketProcessingStage : IAIDiscoveryStage
 {
@@ -28,17 +30,28 @@ public sealed class BucketProcessingStage : IAIDiscoveryStage
     {
         var buckets = context.SortedBuckets;
         var processedCount = 0;
+        var abandonedCount = 0;
 
         for (var i = 0; i < buckets.Count; i++)
         {
             var bucket = buckets[i];
+            var state = new BucketProcessingState();
 
             foreach (var step in _steps)
             {
-                await step.ProcessAsync(bucket, cancellationToken);
+                await step.ProcessAsync(bucket, state, cancellationToken);
+
+                if (state.IsAbandoned)
+                {
+                    break;
+                }
             }
 
             processedCount++;
+            if (state.IsAbandoned)
+            {
+                abandonedCount++;
+            }
 
             if (i < buckets.Count - 1)
             {
@@ -46,6 +59,6 @@ public sealed class BucketProcessingStage : IAIDiscoveryStage
             }
         }
 
-        return context with { ProcessedBucketCount = processedCount };
+        return context with { ProcessedBucketCount = processedCount, AbandonedBucketCount = abandonedCount };
     }
 }

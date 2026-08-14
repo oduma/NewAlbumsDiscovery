@@ -7,12 +7,13 @@ using NewAlbumsDiscovery.Domain.MusicAggregator;
 namespace NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 
 /// <summary>
-/// Stage 2 step (docs/requirements/FUNCTIONAL_REQUIREMENTS.md -> Phase 7, extended in Phase 8):
+/// Stage 2 step (docs/requirements/FUNCTIONAL_REQUIREMENTS.md -> Phase 7, extended in Phase 8/9):
 /// renders and prints Prompt 2 for every bucket, selecting the template by BucketType and by
 /// whether the bucket is instrumental. For non-instrumental CountryLanguageGenre buckets, genres
-/// are always substituted with the literal "TBD" - no real genre-expansion chaining yet. For
-/// instrumental CountryLanguageGenre buckets, genres substitute the bucket's own Genre directly,
-/// since there is no genre-expansion pass to chain from.
+/// are substituted with the resolved genre string GenreExpansionPromptStep placed on the shared
+/// BucketProcessingState (Phase 9) - this step never calls Gemini itself. For instrumental
+/// CountryLanguageGenre buckets, genres substitute the bucket's own Genre directly, since there is
+/// no genre-expansion pass to chain from.
 /// </summary>
 public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
 {
@@ -54,7 +55,7 @@ public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
         _options = options;
     }
 
-    public async Task ProcessAsync(AggregatedBucket bucket, CancellationToken cancellationToken)
+    public async Task ProcessAsync(AggregatedBucket bucket, BucketProcessingState state, CancellationToken cancellationToken)
     {
         var isInstrumental = bucket.IsInstrumental(_options.Value.InstrumentalLanguage);
 
@@ -77,7 +78,7 @@ public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
 
         if (bucket.Genre is not null)
         {
-            values["genres"] = isInstrumental ? bucket.Genre : "TBD";
+            values["genres"] = isInstrumental ? bucket.Genre : state.ResolvedGenres!;
         }
 
         var rendered = _renderer.Render(template, values);

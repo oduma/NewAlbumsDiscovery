@@ -15,7 +15,7 @@ public sealed class ReportPublicationStage : IAIDiscoveryStage
 
     public async Task<AIDiscoveryPipelineContext> ExecuteAsync(AIDiscoveryPipelineContext context, CancellationToken cancellationToken)
     {
-        await _notifier.NotifyPipelineCompletedAsync(context.ProcessedBucketCount, cancellationToken);
+        await _notifier.NotifyPipelineCompletedAsync(context.ProcessedBucketCount, context.AbandonedBucketCount, cancellationToken);
         return context;
     }
 }

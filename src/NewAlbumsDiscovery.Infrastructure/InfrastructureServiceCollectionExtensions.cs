@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using NewAlbumsDiscovery.Application.AIDiscovery;
 using NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 using NewAlbumsDiscovery.Application.AIDiscovery.Prompts;
 using NewAlbumsDiscovery.Application.MusicAggregator;
@@ -28,6 +29,13 @@ public static class InfrastructureServiceCollectionExtensions
                 $"loved-tracks.db was not found at '{lovedTracksDbPath}'. It is owned by an external product and is never created by this application.");
         }
 
+        var geminiApiKey = configuration["NewAlbumsDiscovery:GeminiApiKey"];
+        if (string.IsNullOrWhiteSpace(geminiApiKey))
+        {
+            throw new InvalidOperationException(
+                "NewAlbumsDiscovery__GeminiApiKey is not set. It is required to call the Gemini API.");
+        }
+
         var appDbPath = configuration["NewAlbumsDiscovery:Database:AppDbPath"];
         if (string.IsNullOrWhiteSpace(appDbPath))
         {
@@ -48,6 +56,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IPromptTemplateProvider, EmbeddedPromptTemplateProvider>();
 
         services.AddScoped<IDiscoveryNotifier, ConsoleDiscoveryNotifier>();
+
+        services.AddHttpClient<IGeminiClient, GeminiHttpClient>();
 
         return services;
     }

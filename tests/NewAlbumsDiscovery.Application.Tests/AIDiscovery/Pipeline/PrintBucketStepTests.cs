@@ -13,7 +13,7 @@ public class PrintBucketStepTests
         var step = new PrintBucketStep(notifier.Object);
         var bucket = AggregatedBucket.Create("Netherlands/Dutch", BucketType.CountryLanguage, "Netherlands", "Dutch", null, 12, DateTime.UtcNow);
 
-        await step.ProcessAsync(bucket, CancellationToken.None);
+        await step.ProcessAsync(bucket, new BucketProcessingState(), CancellationToken.None);
 
         notifier.Verify(n => n.NotifyBucketProcessedAsync("Netherlands/Dutch", 12, It.IsAny<CancellationToken>()), Times.Once);
     }

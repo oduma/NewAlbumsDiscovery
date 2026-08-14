@@ -45,14 +45,28 @@ public class ConsoleDiscoveryNotifierTests
     }
 
     [Fact]
-    public async Task NotifyPipelineCompletedAsync_WritesProcessedCount()
+    public async Task NotifyPipelineCompletedAsync_WritesProcessedAndAbandonedCounts()
     {
         var notifier = new ConsoleDiscoveryNotifier();
 
         var output = await CaptureConsoleOutputAsync(
-            () => notifier.NotifyPipelineCompletedAsync(4, CancellationToken.None));
+            () => notifier.NotifyPipelineCompletedAsync(4, 1, CancellationToken.None));
 
-        Assert.Contains("4", output);
+        Assert.Contains("Total Buckets Processed: 4", output);
+        Assert.Contains("Total Buckets Abandoned: 1", output);
+    }
+
+    [Fact]
+    public async Task NotifyBucketAbandonedAsync_WritesBucketNameTrackCountAndReason()
+    {
+        var notifier = new ConsoleDiscoveryNotifier();
+
+        var output = await CaptureConsoleOutputAsync(
+            () => notifier.NotifyBucketAbandonedAsync("USA/English/Indie Pop", 9, "exhausted retries", CancellationToken.None));
+
+        Assert.Contains("USA/English/Indie Pop", output);
+        Assert.Contains("9", output);
+        Assert.Contains("exhausted retries", output);
     }
 
     [Fact]

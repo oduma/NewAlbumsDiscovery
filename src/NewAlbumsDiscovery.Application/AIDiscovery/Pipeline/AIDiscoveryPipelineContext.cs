@@ -7,4 +7,7 @@ namespace NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 /// (docs/requirements/FUNCTIONAL_REQUIREMENTS.md → Phase 5 → Design Notes). Not a Domain concept —
 /// this is an Application-layer coordination artifact with no business invariant of its own.
 /// </summary>
-public sealed record AIDiscoveryPipelineContext(IReadOnlyList<AggregatedBucket> SortedBuckets, int ProcessedBucketCount = 0);
+public sealed record AIDiscoveryPipelineContext(
+    IReadOnlyList<AggregatedBucket> SortedBuckets,
+    int ProcessedBucketCount = 0,
+    int AbandonedBucketCount = 0);

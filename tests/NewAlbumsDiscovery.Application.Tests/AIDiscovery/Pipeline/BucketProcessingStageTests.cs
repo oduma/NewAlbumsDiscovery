@@ -27,9 +27,10 @@ public class BucketProcessingStageTests
 
         var result = await stage.ExecuteAsync(context, CancellationToken.None);
 
-        step.Verify(s => s.ProcessAsync(It.IsAny<AggregatedBucket>(), It.IsAny<CancellationToken>()), Times.Never);
+        step.Verify(s => s.ProcessAsync(It.IsAny<AggregatedBucket>(), It.IsAny<BucketProcessingState>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Empty(timeProvider.Delays);
         Assert.Equal(0, result.ProcessedBucketCount);
+        Assert.Equal(0, result.AbandonedBucketCount);
     }
 
     [Fact]
@@ -43,9 +44,10 @@ public class BucketProcessingStageTests
 
         var result = await stage.ExecuteAsync(context, CancellationToken.None);
 
-        step.Verify(s => s.ProcessAsync(bucket, It.IsAny<CancellationToken>()), Times.Once);
+        step.Verify(s => s.ProcessAsync(bucket, It.IsAny<BucketProcessingState>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Empty(timeProvider.Delays);
         Assert.Equal(1, result.ProcessedBucketCount);
+        Assert.Equal(0, result.AbandonedBucketCount);
     }
 
     [Fact]
@@ -81,12 +83,12 @@ public class BucketProcessingStageTests
     {
         var callOrder = new List<string>();
         var stepA = new Mock<IBucketProcessingStep>();
-        stepA.Setup(s => s.ProcessAsync(It.IsAny<AggregatedBucket>(), It.IsAny<CancellationToken>()))
-            .Callback<AggregatedBucket, CancellationToken>((b, _) => callOrder.Add($"A:{b.BucketName}"))
+        stepA.Setup(s => s.ProcessAsync(It.IsAny<AggregatedBucket>(), It.IsAny<BucketProcessingState>(), It.IsAny<CancellationToken>()))
+            .Callback<AggregatedBucket, BucketProcessingState, CancellationToken>((b, _, _) => callOrder.Add($"A:{b.BucketName}"))
             .Returns(Task.CompletedTask);
         var stepB = new Mock<IBucketProcessingStep>();
-        stepB.Setup(s => s.ProcessAsync(It.IsAny<AggregatedBucket>(), It.IsAny<CancellationToken>()))
-            .Callback<AggregatedBucket, CancellationToken>((b, _) => callOrder.Add($"B:{b.BucketName}"))
+        stepB.Setup(s => s.ProcessAsync(It.IsAny<AggregatedBucket>(), It.IsAny<BucketProcessingState>(), It.IsAny<CancellationToken>()))
+            .Callback<AggregatedBucket, BucketProcessingState, CancellationToken>((b, _, _) => callOrder.Add($"B:{b.BucketName}"))
             .Returns(Task.CompletedTask);
         var timeProvider = new RecordingTimeProvider();
         var stage = CreateStage([stepA.Object, stepB.Object], timeProvider);
@@ -109,5 +111,60 @@ public class BucketProcessingStageTests
         var result = await stage.ExecuteAsync(context, CancellationToken.None);
 
         Assert.Equal(buckets, result.SortedBuckets);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenAStepAbandonsTheBucket_SkipsRemainingStepsForThatBucketOnly()
+    {
+        var callOrder = new List<string>();
+        var stepA = new Mock<IBucketProcessingStep>();
+        stepA.Setup(s => s.ProcessAsync(It.IsAny<AggregatedBucket>(), It.IsAny<BucketProcessingState>(), It.IsAny<CancellationToken>()))
+            .Callback<AggregatedBucket, BucketProcessingState, CancellationToken>((b, _, _) => callOrder.Add($"A:{b.BucketName}"))
+            .Returns(Task.CompletedTask);
+        var stepB = new Mock<IBucketProcessingStep>();
+        stepB.Setup(s => s.ProcessAsync(It.IsAny<AggregatedBucket>(), It.IsAny<BucketProcessingState>(), It.IsAny<CancellationToken>()))
+            .Callback<AggregatedBucket, BucketProcessingState, CancellationToken>((b, state, _) =>
+            {
+                callOrder.Add($"B:{b.BucketName}");
+                if (b.BucketName == "First")
+                {
+                    state.Abandon();
+                }
+            })
+            .Returns(Task.CompletedTask);
+        var stepC = new Mock<IBucketProcessingStep>();
+        stepC.Setup(s => s.ProcessAsync(It.IsAny<AggregatedBucket>(), It.IsAny<BucketProcessingState>(), It.IsAny<CancellationToken>()))
+            .Callback<AggregatedBucket, BucketProcessingState, CancellationToken>((b, _, _) => callOrder.Add($"C:{b.BucketName}"))
+            .Returns(Task.CompletedTask);
+        var timeProvider = new RecordingTimeProvider();
+        var stage = CreateStage([stepA.Object, stepB.Object, stepC.Object], timeProvider);
+        var context = new AIDiscoveryPipelineContext([Bucket("First", 5), Bucket("Second", 3)]);
+
+        await stage.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal(["A:First", "B:First", "A:Second", "B:Second", "C:Second"], callOrder);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithAbandonedBuckets_ReturnsCorrectAbandonedBucketCount()
+    {
+        var step = new Mock<IBucketProcessingStep>();
+        step.Setup(s => s.ProcessAsync(It.IsAny<AggregatedBucket>(), It.IsAny<BucketProcessingState>(), It.IsAny<CancellationToken>()))
+            .Callback<AggregatedBucket, BucketProcessingState, CancellationToken>((b, state, _) =>
+            {
+                if (b.BucketName != "Second")
+                {
+                    state.Abandon();
+                }
+            })
+            .Returns(Task.CompletedTask);
+        var timeProvider = new RecordingTimeProvider();
+        var stage = CreateStage([step.Object], timeProvider);
+        var context = new AIDiscoveryPipelineContext([Bucket("First", 5), Bucket("Second", 3), Bucket("Third", 1)]);
+
+        var result = await stage.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal(3, result.ProcessedBucketCount);
+        Assert.Equal(2, result.AbandonedBucketCount);
     }
 }

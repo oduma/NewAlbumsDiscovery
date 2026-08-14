@@ -45,7 +45,7 @@ public class DiscoveryQueryPromptStepTests
         var step = CreateStep(templates, notifier, maxAlbumsPerQuery: 20);
         var bucket = AggregatedBucket.Create("Romania/Instrumental", BucketType.CountryLanguage, "Romania", "Instrumental", null, 5, AsOfUtc);
 
-        await step.ProcessAsync(bucket, CancellationToken.None);
+        await step.ProcessAsync(bucket, new BucketProcessingState(), CancellationToken.None);
 
         notifier.Verify(
             n => n.NotifyPromptRenderedAsync(
@@ -66,7 +66,7 @@ public class DiscoveryQueryPromptStepTests
         var step = CreateStep(templates, notifier, maxAlbumsPerQuery: 20);
         var bucket = AggregatedBucket.Create("Romania/Instrumental/Ambient", BucketType.CountryLanguageGenre, "Romania", "Instrumental", "Ambient", 5, AsOfUtc);
 
-        await step.ProcessAsync(bucket, CancellationToken.None);
+        await step.ProcessAsync(bucket, new BucketProcessingState(), CancellationToken.None);
 
         notifier.Verify(
             n => n.NotifyPromptRenderedAsync(
@@ -87,7 +87,7 @@ public class DiscoveryQueryPromptStepTests
         var step = CreateStep(templates, notifier, instrumentalLanguage: "NoVocals");
         var bucket = AggregatedBucket.Create("Romania/NoVocals", BucketType.CountryLanguage, "Romania", "NoVocals", null, 5, AsOfUtc);
 
-        await step.ProcessAsync(bucket, CancellationToken.None);
+        await step.ProcessAsync(bucket, new BucketProcessingState(), CancellationToken.None);
 
         notifier.Verify(
             n => n.NotifyPromptRenderedAsync("--- PROMPT 2: DISCOVERY QUERY ---", "Romania", It.IsAny<CancellationToken>()),
@@ -105,7 +105,7 @@ public class DiscoveryQueryPromptStepTests
         var step = CreateStep(templates, notifier, maxAlbumsPerQuery: 20);
         var bucket = AggregatedBucket.Create("Romania", BucketType.Country, "Romania", null, null, 15, AsOfUtc);
 
-        await step.ProcessAsync(bucket, CancellationToken.None);
+        await step.ProcessAsync(bucket, new BucketProcessingState(), CancellationToken.None);
 
         notifier.Verify(
             n => n.NotifyPromptRenderedAsync(
@@ -126,7 +126,7 @@ public class DiscoveryQueryPromptStepTests
         var step = CreateStep(templates, notifier, maxAlbumsPerQuery: 20);
         var bucket = AggregatedBucket.Create("Romania/Romanian", BucketType.CountryLanguage, "Romania", "Romanian", null, 15, AsOfUtc);
 
-        await step.ProcessAsync(bucket, CancellationToken.None);
+        await step.ProcessAsync(bucket, new BucketProcessingState(), CancellationToken.None);
 
         notifier.Verify(
             n => n.NotifyPromptRenderedAsync(
@@ -137,7 +137,7 @@ public class DiscoveryQueryPromptStepTests
     }
 
     [Fact]
-    public async Task ProcessAsync_WithCountryLanguageGenreBucket_UsesCountryLanguageGenresPromptAndSubstitutesGenresAsTbd()
+    public async Task ProcessAsync_WithCountryLanguageGenreBucket_UsesCountryLanguageGenresPromptAndSubstitutesResolvedGenres()
     {
         var templates = new Mock<IPromptTemplateProvider>();
         templates
@@ -146,13 +146,14 @@ public class DiscoveryQueryPromptStepTests
         var notifier = new Mock<IDiscoveryNotifier>();
         var step = CreateStep(templates, notifier, maxAlbumsPerQuery: 20);
         var bucket = AggregatedBucket.Create("Romania/Romanian/Indie Pop", BucketType.CountryLanguageGenre, "Romania", "Romanian", "Indie Pop", 15, AsOfUtc);
+        var state = new BucketProcessingState { ResolvedGenres = "Alt Pop, Bedroom Pop" };
 
-        await step.ProcessAsync(bucket, CancellationToken.None);
+        await step.ProcessAsync(bucket, state, CancellationToken.None);
 
         notifier.Verify(
             n => n.NotifyPromptRenderedAsync(
                 "--- PROMPT 2: DISCOVERY QUERY ---",
-                "Romania|Romanian|TBD|between 14-JUL-2026 and 13-AUG-2026|20",
+                "Romania|Romanian|Alt Pop, Bedroom Pop|between 14-JUL-2026 and 13-AUG-2026|20",
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -168,7 +169,7 @@ public class DiscoveryQueryPromptStepTests
         var step = CreateStep(templates, notifier, maxAlbumsPerQuery: 42);
         var bucket = AggregatedBucket.Create("Romania", BucketType.Country, "Romania", null, null, 15, AsOfUtc);
 
-        await step.ProcessAsync(bucket, CancellationToken.None);
+        await step.ProcessAsync(bucket, new BucketProcessingState(), CancellationToken.None);
 
         notifier.Verify(
             n => n.NotifyPromptRenderedAsync("--- PROMPT 2: DISCOVERY QUERY ---", "42", It.IsAny<CancellationToken>()),
