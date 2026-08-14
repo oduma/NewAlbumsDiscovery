@@ -10,4 +10,8 @@ namespace NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 public sealed record AIDiscoveryPipelineContext(
     IReadOnlyList<AggregatedBucket> SortedBuckets,
     int ProcessedBucketCount = 0,
-    int AbandonedBucketCount = 0);
+    int AbandonedBucketCount = 0,
+    IReadOnlyList<BucketOutcome>? BucketOutcomes = null)
+{
+    public IReadOnlyList<BucketOutcome> BucketOutcomes { get; init; } = BucketOutcomes ?? [];
+}

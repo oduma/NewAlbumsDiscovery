@@ -18,5 +18,7 @@ public interface IDiscoveryNotifier
 
     Task NotifyPipelineCompletedAsync(int processedBucketCount, int abandonedBucketCount, CancellationToken cancellationToken);
 
-    Task NotifyPromptRenderedAsync(string header, string promptContent, CancellationToken cancellationToken);
+    Task NotifyBucketDiscoverySucceededAsync(string bucketName, int albumCount, CancellationToken cancellationToken);
+
+    Task NotifyDiscoveryReportAsync(DiscoveryRunReport report, CancellationToken cancellationToken);
 }

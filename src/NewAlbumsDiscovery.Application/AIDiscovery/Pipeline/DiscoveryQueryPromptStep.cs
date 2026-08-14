@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using NewAlbumsDiscovery.Application.AIDiscovery.Prompts;
 using NewAlbumsDiscovery.Domain.AIDiscovery;
@@ -7,17 +8,18 @@ using NewAlbumsDiscovery.Domain.MusicAggregator;
 namespace NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 
 /// <summary>
-/// Stage 2 step (docs/requirements/FUNCTIONAL_REQUIREMENTS.md -> Phase 7, extended in Phase 8/9):
-/// renders and prints Prompt 2 for every bucket, selecting the template by BucketType and by
-/// whether the bucket is instrumental. For non-instrumental CountryLanguageGenre buckets, genres
-/// are substituted with the resolved genre string GenreExpansionPromptStep placed on the shared
-/// BucketProcessingState (Phase 9) - this step never calls Gemini itself. For instrumental
-/// CountryLanguageGenre buckets, genres substitute the bucket's own Genre directly, since there is
-/// no genre-expansion pass to chain from.
+/// Stage 2 step (docs/requirements/FUNCTIONAL_REQUIREMENTS.md -> Phase 7, extended in Phase 8/9,
+/// wired to the real Gemini API in Phase 10): renders Prompt 2 for every bucket, selecting the
+/// template by BucketType and by whether the bucket is instrumental, then sends it to Gemini
+/// (never printed to the console — Phase 10 §2) via the shared GeminiRetryExecutor. A successful
+/// response is parsed into candidate (Artist, Album) pairs onto BucketProcessingState for
+/// AlbumPersistenceStep to dedup/persist; a malformed response yields zero candidates without
+/// retrying or abandoning (Phase 10 Decision 6); an exhausted-retries or permanent failure
+/// abandons the bucket the same way GenreExpansionPromptStep does.
 /// </summary>
 public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
 {
-    private const string Header = "--- PROMPT 2: DISCOVERY QUERY ---";
+    private static readonly JsonSerializerOptions AlbumJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private static readonly IReadOnlyDictionary<BucketType, string> TemplatesByBucketType = new Dictionary<BucketType, string>
     {
@@ -37,7 +39,9 @@ public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
     private readonly TimeframeFormatter _timeframeFormatter;
     private readonly IDiscoveryNotifier _notifier;
     private readonly TimeProvider _timeProvider;
+    private readonly GeminiRetryExecutor _retryExecutor;
     private readonly IOptions<AIDiscoveryOptions> _options;
+    private readonly IOptions<GeminiOptions> _geminiOptions;
 
     public DiscoveryQueryPromptStep(
         IPromptTemplateProvider templates,
@@ -45,17 +49,21 @@ public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
         TimeframeFormatter timeframeFormatter,
         IDiscoveryNotifier notifier,
         TimeProvider timeProvider,
-        IOptions<AIDiscoveryOptions> options)
+        GeminiRetryExecutor retryExecutor,
+        IOptions<AIDiscoveryOptions> options,
+        IOptions<GeminiOptions> geminiOptions)
     {
         _templates = templates;
         _renderer = renderer;
         _timeframeFormatter = timeframeFormatter;
         _notifier = notifier;
         _timeProvider = timeProvider;
+        _retryExecutor = retryExecutor;
         _options = options;
+        _geminiOptions = geminiOptions;
     }
 
-    public async Task ProcessAsync(AggregatedBucket bucket, BucketProcessingState state, CancellationToken cancellationToken)
+    public async Task ProcessAsync(AggregatedBucket bucket, BucketProcessingState state, ISet<AlbumKey> existingAlbumKeys, CancellationToken cancellationToken)
     {
         var isInstrumental = bucket.IsInstrumental(_options.Value.InstrumentalLanguage);
 
@@ -82,6 +90,32 @@ public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
         }
 
         var rendered = _renderer.Render(template, values);
-        await _notifier.NotifyPromptRenderedAsync(Header, rendered, cancellationToken);
+
+        var result = await _retryExecutor.ExecuteAsync(rendered, _geminiOptions.Value.RetryBackoffSeconds, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            state.DiscoveredCandidates = ParseCandidates(result.ResponseText!);
+            return;
+        }
+
+        await _notifier.NotifyBucketAbandonedAsync(
+            bucket.BucketName, bucket.TrackCount, result.ErrorMessage ?? "Gemini API call failed.", cancellationToken);
+        state.Abandon();
     }
+
+    private static IReadOnlyList<(string Artist, string Album)> ParseCandidates(string responseText)
+    {
+        try
+        {
+            var dtos = JsonSerializer.Deserialize<List<GeminiAlbumDto>>(responseText, AlbumJsonOptions);
+            return dtos?.Select(dto => (dto.Artist, dto.Album)).ToList() ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private sealed record GeminiAlbumDto(string Artist, string Album);
 }

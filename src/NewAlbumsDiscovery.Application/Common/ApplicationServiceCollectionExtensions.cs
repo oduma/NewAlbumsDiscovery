@@ -34,6 +34,7 @@ public static class ApplicationServiceCollectionExtensions
 
         services.AddSingleton<PromptRenderer>();
         services.AddSingleton<TimeframeFormatter>();
+        services.AddScoped<GeminiRetryExecutor>();
 
         // Registration order is load-bearing: IEnumerable<IAIDiscoveryStage> resolves in the exact
         // order stages are registered below (documented Microsoft.Extensions.DependencyInjection
@@ -44,10 +45,12 @@ public static class ApplicationServiceCollectionExtensions
 
         // Registration order is load-bearing: IEnumerable<IBucketProcessingStep> resolves in this
         // exact order. The standard name/track-count print always runs first, then Prompt 1
-        // (genre expansion, no-ops unless the bucket has a Genre), then Prompt 2 (discovery query).
+        // (genre expansion, no-ops unless the bucket has a Genre), then Prompt 2 (discovery
+        // query), then persistence of whatever Prompt 2 discovered (Phase 10) — must run last.
         services.AddScoped<IBucketProcessingStep, PrintBucketStep>();
         services.AddScoped<IBucketProcessingStep, GenreExpansionPromptStep>();
         services.AddScoped<IBucketProcessingStep, DiscoveryQueryPromptStep>();
+        services.AddScoped<IBucketProcessingStep, AlbumPersistenceStep>();
 
         services.Configure<CoreOperationsOptions>(configuration.GetSection("NewAlbumsDiscovery:CoreOperations"));
 

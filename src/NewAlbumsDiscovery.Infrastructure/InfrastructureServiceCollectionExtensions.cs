@@ -52,6 +52,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<ILovedTrackRepository, LovedTrackRepository>();
         services.AddScoped<IAggregatedBucketRepository, AggregatedBucketRepository>();
+        services.AddScoped<IDiscoveredAlbumRepository, DiscoveredAlbumRepository>();
         services.AddSingleton<ICountryMasterDataProvider, EmbeddedCountryMasterDataProvider>();
         services.AddSingleton<IPromptTemplateProvider, EmbeddedPromptTemplateProvider>();
 

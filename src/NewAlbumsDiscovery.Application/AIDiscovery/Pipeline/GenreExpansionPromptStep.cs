@@ -13,30 +13,27 @@ public sealed class GenreExpansionPromptStep : IBucketProcessingStep
     private readonly IPromptTemplateProvider _templates;
     private readonly PromptRenderer _renderer;
     private readonly IDiscoveryNotifier _notifier;
-    private readonly IGeminiClient _geminiClient;
+    private readonly GeminiRetryExecutor _retryExecutor;
     private readonly IOptions<AIDiscoveryOptions> _aiDiscoveryOptions;
     private readonly IOptions<GeminiOptions> _geminiOptions;
-    private readonly TimeProvider _timeProvider;
 
     public GenreExpansionPromptStep(
         IPromptTemplateProvider templates,
         PromptRenderer renderer,
         IDiscoveryNotifier notifier,
-        IGeminiClient geminiClient,
+        GeminiRetryExecutor retryExecutor,
         IOptions<AIDiscoveryOptions> aiDiscoveryOptions,
-        IOptions<GeminiOptions> geminiOptions,
-        TimeProvider timeProvider)
+        IOptions<GeminiOptions> geminiOptions)
     {
         _templates = templates;
         _renderer = renderer;
         _notifier = notifier;
-        _geminiClient = geminiClient;
+        _retryExecutor = retryExecutor;
         _aiDiscoveryOptions = aiDiscoveryOptions;
         _geminiOptions = geminiOptions;
-        _timeProvider = timeProvider;
     }
 
-    public async Task ProcessAsync(AggregatedBucket bucket, BucketProcessingState state, CancellationToken cancellationToken)
+    public async Task ProcessAsync(AggregatedBucket bucket, BucketProcessingState state, ISet<AlbumKey> existingAlbumKeys, CancellationToken cancellationToken)
     {
         if (bucket.Genre is null || bucket.IsInstrumental(_aiDiscoveryOptions.Value.InstrumentalLanguage))
         {
@@ -52,29 +49,17 @@ public sealed class GenreExpansionPromptStep : IBucketProcessingStep
         };
         var prompt = _renderer.Render(template, values);
 
-        var backoffs = _geminiOptions.Value.RetryBackoffSeconds;
+        var result = await _retryExecutor.ExecuteAsync(prompt, _geminiOptions.Value.RetryBackoffSeconds, cancellationToken);
 
-        for (var attempt = 0; ; attempt++)
+        if (result.IsSuccess)
         {
-            var result = await _geminiClient.GenerateContentAsync(prompt, cancellationToken);
-
-            if (result.IsSuccess)
-            {
-                state.ResolvedGenres = ResolveGenres(result.ResponseText!, bucket.Genre);
-                return;
-            }
-
-            if (result.IsTransientFailure && attempt < backoffs.Length)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(backoffs[attempt]), _timeProvider, cancellationToken);
-                continue;
-            }
-
-            await _notifier.NotifyBucketAbandonedAsync(
-                bucket.BucketName, bucket.TrackCount, result.ErrorMessage ?? "Gemini API call failed.", cancellationToken);
-            state.Abandon();
+            state.ResolvedGenres = ResolveGenres(result.ResponseText!, bucket.Genre);
             return;
         }
+
+        await _notifier.NotifyBucketAbandonedAsync(
+            bucket.BucketName, bucket.TrackCount, result.ErrorMessage ?? "Gemini API call failed.", cancellationToken);
+        state.Abandon();
     }
 
     private static string ResolveGenres(string responseText, string fallbackGenre)

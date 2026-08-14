@@ -1,3 +1,4 @@
+using NewAlbumsDiscovery.Domain.AIDiscovery;
 using NewAlbumsDiscovery.Domain.MusicAggregator;
 
 namespace NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
@@ -16,6 +17,6 @@ public sealed class PrintBucketStep : IBucketProcessingStep
         _notifier = notifier;
     }
 
-    public Task ProcessAsync(AggregatedBucket bucket, BucketProcessingState state, CancellationToken cancellationToken)
+    public Task ProcessAsync(AggregatedBucket bucket, BucketProcessingState state, ISet<AlbumKey> existingAlbumKeys, CancellationToken cancellationToken)
         => _notifier.NotifyBucketProcessedAsync(bucket.BucketName, bucket.TrackCount, cancellationToken);
 }
