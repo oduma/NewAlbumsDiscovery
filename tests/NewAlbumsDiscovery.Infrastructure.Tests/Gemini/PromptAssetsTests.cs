@@ -11,7 +11,6 @@ namespace NewAlbumsDiscovery.Infrastructure.Tests.Gemini;
 public class PromptAssetsTests
 {
     [Theory]
-    [InlineData("NewAlbumsDiscovery.Infrastructure.Gemini.Prompts.country-genres-prompt.md")]
     [InlineData("NewAlbumsDiscovery.Infrastructure.Gemini.Prompts.genre-expansion-prompt.md")]
     public void EmbeddedPromptTemplate_LoadsAndIsNonEmpty(string resourceName)
     {

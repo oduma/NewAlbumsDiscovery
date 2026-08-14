@@ -16,6 +16,8 @@ public class EmbeddedPromptTemplateProviderTests
     [InlineData("country-language-prompt.md", "{{language}}")]
     [InlineData("country-language-genres-prompt.md", "{{genres}}")]
     [InlineData("genre-expansion-prompt.md", "{{genre}}")]
+    [InlineData("country-instrumental-prompt.md", "{{country}}")]
+    [InlineData("country-instrumental-genres-prompt.md", "{{genres}}")]
     public async Task GetTemplateAsync_KnownTemplate_LoadsNonEmptyContentContainingExpectedToken(string templateFileName, string expectedToken)
     {
         var content = await _provider.GetTemplateAsync(templateFileName, CancellationToken.None);
@@ -29,6 +31,13 @@ public class EmbeddedPromptTemplateProviderTests
     {
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => _provider.GetTemplateAsync("does-not-exist.md", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetTemplateAsync_DeletedCountryGenresTemplate_Throws()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _provider.GetTemplateAsync("country-genres-prompt.md", CancellationToken.None));
     }
 
     [Fact]

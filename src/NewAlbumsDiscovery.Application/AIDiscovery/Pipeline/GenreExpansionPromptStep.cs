@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using NewAlbumsDiscovery.Application.AIDiscovery.Prompts;
 using NewAlbumsDiscovery.Domain.AIDiscovery;
 using NewAlbumsDiscovery.Domain.MusicAggregator;
@@ -17,17 +18,23 @@ public sealed class GenreExpansionPromptStep : IBucketProcessingStep
     private readonly IPromptTemplateProvider _templates;
     private readonly PromptRenderer _renderer;
     private readonly IDiscoveryNotifier _notifier;
+    private readonly IOptions<AIDiscoveryOptions> _options;
 
-    public GenreExpansionPromptStep(IPromptTemplateProvider templates, PromptRenderer renderer, IDiscoveryNotifier notifier)
+    public GenreExpansionPromptStep(
+        IPromptTemplateProvider templates,
+        PromptRenderer renderer,
+        IDiscoveryNotifier notifier,
+        IOptions<AIDiscoveryOptions> options)
     {
         _templates = templates;
         _renderer = renderer;
         _notifier = notifier;
+        _options = options;
     }
 
     public async Task ProcessAsync(AggregatedBucket bucket, CancellationToken cancellationToken)
     {
-        if (bucket.Genre is null || bucket.IsInstrumental)
+        if (bucket.Genre is null || bucket.IsInstrumental(_options.Value.InstrumentalLanguage))
         {
             return;
         }

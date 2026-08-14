@@ -62,7 +62,11 @@ public sealed class AggregatedBucket : IEquatable<AggregatedBucket>
         DateTime asOfUtc)
         => new(Guid.NewGuid(), bucketName, bucketType, country, language, genre, trackCount, asOfUtc);
 
-    public bool IsInstrumental => string.Equals(Language, "Instrumental", StringComparison.Ordinal);
+    public bool IsInstrumental(string instrumentalLanguage)
+    {
+        ArgumentNullException.ThrowIfNull(instrumentalLanguage);
+        return string.Equals(Language, instrumentalLanguage, StringComparison.Ordinal);
+    }
 
     public bool Equals(AggregatedBucket? other) => other is not null && Id == other.Id;
 

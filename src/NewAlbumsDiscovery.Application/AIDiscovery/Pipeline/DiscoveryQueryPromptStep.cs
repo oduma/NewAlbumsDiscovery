@@ -7,10 +7,12 @@ using NewAlbumsDiscovery.Domain.MusicAggregator;
 namespace NewAlbumsDiscovery.Application.AIDiscovery.Pipeline;
 
 /// <summary>
-/// Stage 2 step (docs/requirements/FUNCTIONAL_REQUIREMENTS.md -> Phase 7): renders and prints
-/// Prompt 2 for every non-instrumental bucket, selecting the template by BucketType. Genres are
-/// always substituted with the literal "TBD" for CountryLanguageGenre buckets this phase - no
-/// real genre-expansion chaining yet.
+/// Stage 2 step (docs/requirements/FUNCTIONAL_REQUIREMENTS.md -> Phase 7, extended in Phase 8):
+/// renders and prints Prompt 2 for every bucket, selecting the template by BucketType and by
+/// whether the bucket is instrumental. For non-instrumental CountryLanguageGenre buckets, genres
+/// are always substituted with the literal "TBD" - no real genre-expansion chaining yet. For
+/// instrumental CountryLanguageGenre buckets, genres substitute the bucket's own Genre directly,
+/// since there is no genre-expansion pass to chain from.
 /// </summary>
 public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
 {
@@ -21,6 +23,12 @@ public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
         [BucketType.Country] = "country-prompt.md",
         [BucketType.CountryLanguage] = "country-language-prompt.md",
         [BucketType.CountryLanguageGenre] = "country-language-genres-prompt.md",
+    };
+
+    private static readonly IReadOnlyDictionary<BucketType, string> InstrumentalTemplatesByBucketType = new Dictionary<BucketType, string>
+    {
+        [BucketType.CountryLanguage] = "country-instrumental-prompt.md",
+        [BucketType.CountryLanguageGenre] = "country-instrumental-genres-prompt.md",
     };
 
     private readonly IPromptTemplateProvider _templates;
@@ -48,12 +56,11 @@ public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
 
     public async Task ProcessAsync(AggregatedBucket bucket, CancellationToken cancellationToken)
     {
-        if (bucket.IsInstrumental)
-        {
-            return;
-        }
+        var isInstrumental = bucket.IsInstrumental(_options.Value.InstrumentalLanguage);
 
-        var templateFileName = TemplatesByBucketType[bucket.BucketType];
+        var templateFileName = isInstrumental
+            ? InstrumentalTemplatesByBucketType[bucket.BucketType]
+            : TemplatesByBucketType[bucket.BucketType];
         var template = await _templates.GetTemplateAsync(templateFileName, cancellationToken);
 
         var values = new Dictionary<string, string>
@@ -63,14 +70,14 @@ public sealed class DiscoveryQueryPromptStep : IBucketProcessingStep
             ["maxAlbums"] = _options.Value.MaxAlbumsPerQuery.ToString(CultureInfo.InvariantCulture),
         };
 
-        if (bucket.Language is not null)
+        if (!isInstrumental && bucket.Language is not null)
         {
             values["language"] = bucket.Language;
         }
 
         if (bucket.Genre is not null)
         {
-            values["genres"] = "TBD";
+            values["genres"] = isInstrumental ? bucket.Genre : "TBD";
         }
 
         var rendered = _renderer.Render(template, values);

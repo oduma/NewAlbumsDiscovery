@@ -109,7 +109,7 @@ public class AggregatedBucketTests
     {
         var bucket = AggregatedBucket.Create("Romania/Instrumental", BucketType.CountryLanguage, "Romania", "Instrumental", null, 5, AsOfUtc);
 
-        Assert.True(bucket.IsInstrumental);
+        Assert.True(bucket.IsInstrumental("Instrumental"));
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class AggregatedBucketTests
     {
         var bucket = AggregatedBucket.Create("Romania/instrumental", BucketType.CountryLanguage, "Romania", "instrumental", null, 5, AsOfUtc);
 
-        Assert.False(bucket.IsInstrumental);
+        Assert.False(bucket.IsInstrumental("Instrumental"));
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public class AggregatedBucketTests
     {
         var bucket = AggregatedBucket.Create("Romania", BucketType.Country, "Romania", null, null, 5, AsOfUtc);
 
-        Assert.False(bucket.IsInstrumental);
+        Assert.False(bucket.IsInstrumental("Instrumental"));
     }
 
     [Fact]
@@ -133,6 +133,23 @@ public class AggregatedBucketTests
     {
         var bucket = AggregatedBucket.Create("Romania/English", BucketType.CountryLanguage, "Romania", "English", null, 5, AsOfUtc);
 
-        Assert.False(bucket.IsInstrumental);
+        Assert.False(bucket.IsInstrumental("Instrumental"));
+    }
+
+    [Fact]
+    public void IsInstrumental_WithNullArgument_Throws()
+    {
+        var bucket = AggregatedBucket.Create("Romania/Instrumental", BucketType.CountryLanguage, "Romania", "Instrumental", null, 5, AsOfUtc);
+
+        Assert.Throws<ArgumentNullException>(() => bucket.IsInstrumental(null!));
+    }
+
+    [Fact]
+    public void IsInstrumental_WithNonDefaultConfiguredValue_MatchesConfiguredStringInstead()
+    {
+        var bucket = AggregatedBucket.Create("Romania/NoVocals", BucketType.CountryLanguage, "Romania", "NoVocals", null, 5, AsOfUtc);
+
+        Assert.True(bucket.IsInstrumental("NoVocals"));
+        Assert.False(bucket.IsInstrumental("Instrumental"));
     }
 }

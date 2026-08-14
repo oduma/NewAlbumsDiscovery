@@ -17,9 +17,14 @@ public class DiscoveryQueryPromptStepTests
         Mock<IPromptTemplateProvider> templates,
         Mock<IDiscoveryNotifier> notifier,
         TimeProvider? timeProvider = null,
-        int maxAlbumsPerQuery = 20)
+        int maxAlbumsPerQuery = 20,
+        string instrumentalLanguage = "Instrumental")
     {
-        var options = Options.Create(new AIDiscoveryOptions { MaxAlbumsPerQuery = maxAlbumsPerQuery });
+        var options = Options.Create(new AIDiscoveryOptions
+        {
+            MaxAlbumsPerQuery = maxAlbumsPerQuery,
+            InstrumentalLanguage = instrumentalLanguage,
+        });
         return new DiscoveryQueryPromptStep(
             templates.Object,
             new PromptRenderer(),
@@ -30,17 +35,63 @@ public class DiscoveryQueryPromptStepTests
     }
 
     [Fact]
-    public async Task ProcessAsync_WithInstrumentalBucket_NeverRequestsTemplateOrNotifies()
+    public async Task ProcessAsync_WithInstrumentalCountryLanguageBucket_UsesCountryInstrumentalPromptAndOmitsGenres()
     {
         var templates = new Mock<IPromptTemplateProvider>();
+        templates
+            .Setup(t => t.GetTemplateAsync("country-instrumental-prompt.md", It.IsAny<CancellationToken>()))
+            .ReturnsAsync("{{country}}|{{timeframe}}|{{maxAlbums}}|{{genres}}");
         var notifier = new Mock<IDiscoveryNotifier>();
-        var step = CreateStep(templates, notifier);
+        var step = CreateStep(templates, notifier, maxAlbumsPerQuery: 20);
         var bucket = AggregatedBucket.Create("Romania/Instrumental", BucketType.CountryLanguage, "Romania", "Instrumental", null, 5, AsOfUtc);
 
         await step.ProcessAsync(bucket, CancellationToken.None);
 
-        templates.Verify(t => t.GetTemplateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        notifier.Verify(n => n.NotifyPromptRenderedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        notifier.Verify(
+            n => n.NotifyPromptRenderedAsync(
+                "--- PROMPT 2: DISCOVERY QUERY ---",
+                "Romania|between 14-JUL-2026 and 13-AUG-2026|20|{{genres}}",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithInstrumentalCountryLanguageGenreBucket_UsesCountryInstrumentalGenresPromptAndSubstitutesGenreDirectly()
+    {
+        var templates = new Mock<IPromptTemplateProvider>();
+        templates
+            .Setup(t => t.GetTemplateAsync("country-instrumental-genres-prompt.md", It.IsAny<CancellationToken>()))
+            .ReturnsAsync("{{country}}|{{genres}}|{{timeframe}}|{{maxAlbums}}");
+        var notifier = new Mock<IDiscoveryNotifier>();
+        var step = CreateStep(templates, notifier, maxAlbumsPerQuery: 20);
+        var bucket = AggregatedBucket.Create("Romania/Instrumental/Ambient", BucketType.CountryLanguageGenre, "Romania", "Instrumental", "Ambient", 5, AsOfUtc);
+
+        await step.ProcessAsync(bucket, CancellationToken.None);
+
+        notifier.Verify(
+            n => n.NotifyPromptRenderedAsync(
+                "--- PROMPT 2: DISCOVERY QUERY ---",
+                "Romania|Ambient|between 14-JUL-2026 and 13-AUG-2026|20",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithNonDefaultConfiguredInstrumentalLanguage_RoutesByConfiguredValue()
+    {
+        var templates = new Mock<IPromptTemplateProvider>();
+        templates
+            .Setup(t => t.GetTemplateAsync("country-instrumental-prompt.md", It.IsAny<CancellationToken>()))
+            .ReturnsAsync("{{country}}");
+        var notifier = new Mock<IDiscoveryNotifier>();
+        var step = CreateStep(templates, notifier, instrumentalLanguage: "NoVocals");
+        var bucket = AggregatedBucket.Create("Romania/NoVocals", BucketType.CountryLanguage, "Romania", "NoVocals", null, 5, AsOfUtc);
+
+        await step.ProcessAsync(bucket, CancellationToken.None);
+
+        notifier.Verify(
+            n => n.NotifyPromptRenderedAsync("--- PROMPT 2: DISCOVERY QUERY ---", "Romania", It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
